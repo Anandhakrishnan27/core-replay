@@ -19,10 +19,10 @@ demo-discover:    ## real LLM discovery run (needs ANTHROPIC_API_KEY)
 	uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the savings balance"
 
 demo-replay:      ## deterministic replay, success
-	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10002
+	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10002 --supervised
 
 demo-notfound:    ## replay -> business outcome
-	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=99999
+	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=99999 --supervised
 
 demo-handoff:     ## replay -> escalation -> operator page on :8001 -> resume
-	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10001 --fault maint
+	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10001 --fault maint --supervised

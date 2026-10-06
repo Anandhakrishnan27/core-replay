@@ -471,8 +471,8 @@
               "escalate": "#/$defs/Escalate",
               "fail": "#/$defs/Fail",
               "reauthenticate": "#/$defs/Reauthenticate",
-              "retry_step": "#/$defs/RetryStep",
-              "return_outcome": "#/$defs/ReturnOutcome"
+              "return_outcome": "#/$defs/ReturnOutcome",
+              "wait_until_clear": "#/$defs/WaitUntilClear"
             },
             "propertyName": "do"
           },
@@ -484,7 +484,7 @@
               "$ref": "#/$defs/Dismiss"
             },
             {
-              "$ref": "#/$defs/RetryStep"
+              "$ref": "#/$defs/WaitUntilClear"
             },
             {
               "$ref": "#/$defs/Reauthenticate"
@@ -815,31 +815,6 @@
         }
       },
       "title": "Reauthenticate",
-      "type": "object"
-    },
-    "RetryStep": {
-      "additionalProperties": false,
-      "properties": {
-        "do": {
-          "const": "retry_step",
-          "default": "retry_step",
-          "title": "Do",
-          "type": "string"
-        },
-        "max_attempts": {
-          "default": 3,
-          "minimum": 1,
-          "title": "Max Attempts",
-          "type": "integer"
-        },
-        "backoff_ms": {
-          "default": 1000,
-          "minimum": 0,
-          "title": "Backoff Ms",
-          "type": "integer"
-        }
-      },
-      "title": "RetryStep",
       "type": "object"
     },
     "ReturnOutcome": {
@@ -1329,6 +1304,32 @@
       ],
       "title": "ValueType",
       "type": "string"
+    },
+    "WaitUntilClear": {
+      "additionalProperties": false,
+      "description": "Wait (up to `backoff_ms`) for the condition to clear, then re-evaluate the step's race.\n\nIt NEVER repeats the step's action: a condition like \"Processing, please wait\" means the app\nalready accepted the action, and re-submitting could duplicate a write. Each wait counts as one\nattempt; if the condition is still there after `max_attempts`, the executor escalates with\nRECOVERY_EXHAUSTED.",
+      "properties": {
+        "do": {
+          "const": "wait_until_clear",
+          "default": "wait_until_clear",
+          "title": "Do",
+          "type": "string"
+        },
+        "max_attempts": {
+          "default": 3,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "backoff_ms": {
+          "default": 1000,
+          "minimum": 0,
+          "title": "Backoff Ms",
+          "type": "integer"
+        }
+      },
+      "title": "WaitUntilClear",
+      "type": "object"
     },
     "XPathLocator": {
       "additionalProperties": false,

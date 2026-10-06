@@ -18,7 +18,7 @@ Design rules enforced by validators at the bottom of this file:
        (`{{inputs.x}}`, `{{tenant.x}}`, `{{secrets.x}}`). No PII in artifacts.
     4. Every outcome code a handler can return is declared in the contract.
     5. Condition classification must agree with its handler
-       (business -> return_outcome, recoverable -> dismiss/retry,
+       (business -> return_outcome, recoverable -> dismiss/wait_until_clear/reauthenticate,
        hard_failure -> fail/escalate).
     6. Any irreversible step forces `policy.requires_confirmation`.
 """
@@ -292,8 +292,16 @@ class Dismiss(_Model):
     max_times: int = Field(default=2, ge=1)
 
 
-class RetryStep(_Model):
-    do: Literal["retry_step"] = "retry_step"
+class WaitUntilClear(_Model):
+    """Wait (up to `backoff_ms`) for the condition to clear, then re-evaluate the step's race.
+
+    It NEVER repeats the step's action: a condition like "Processing, please wait" means the app
+    already accepted the action, and re-submitting could duplicate a write. Each wait counts as one
+    attempt; if the condition is still there after `max_attempts`, the executor escalates with
+    RECOVERY_EXHAUSTED.
+    """
+
+    do: Literal["wait_until_clear"] = "wait_until_clear"
     max_attempts: int = Field(default=3, ge=1)
     backoff_ms: int = Field(default=1_000, ge=0)
 
@@ -321,7 +329,7 @@ class Escalate(_Model):
 
 
 Handler = Annotated[
-    ReturnOutcome | Dismiss | RetryStep | Reauthenticate | Fail | Escalate, Field(discriminator="do")
+    ReturnOutcome | Dismiss | WaitUntilClear | Reauthenticate | Fail | Escalate, Field(discriminator="do")
 ]
 
 
@@ -333,7 +341,7 @@ class ConditionClass(str, Enum):
 
 _ALLOWED_HANDLERS = {
     ConditionClass.business_outcome: {"return_outcome"},
-    ConditionClass.recoverable: {"dismiss", "retry_step", "reauthenticate"},
+    ConditionClass.recoverable: {"dismiss", "wait_until_clear", "reauthenticate"},
     ConditionClass.hard_failure: {"fail", "escalate"},
 }
 

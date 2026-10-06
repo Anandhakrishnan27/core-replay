@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import socket
 import threading
@@ -12,6 +13,7 @@ import pytest_asyncio
 import uvicorn
 from playwright.async_api import Browser
 
+from cua import catalog
 from cua.config import Policy, Tenant, load_policy, load_tenant
 from cua.evidence.logger import RunLogger
 from cua.safety.policy import PolicyGate
@@ -30,7 +32,10 @@ def policy():
 
 @pytest.fixture
 def raw_artifact() -> dict:
-    return json.loads(ARTIFACT_PATH.read_text())
+    """The fixture artifact, ALWAYS as a draft: tests never depend on whether someone ran `cua approve`."""
+    raw = json.loads(ARTIFACT_PATH.read_text())
+    raw["review"] = {"status": "draft"}
+    return raw
 
 
 @pytest.fixture
@@ -39,9 +44,18 @@ def artifact(raw_artifact) -> CapabilityArtifact:
 
 
 @pytest.fixture
-def approved_artifact(raw_artifact) -> CapabilityArtifact:
-    raw_artifact["review"] = {"status": "approved", "reviewed_by": "tester"}
-    return CapabilityArtifact.model_validate(raw_artifact)
+def catalog_root(tmp_path_factory, raw_artifact) -> Path:
+    """A temp catalog holding a draft copy of the fixture (never the real capabilities/ folder)."""
+    root = tmp_path_factory.mktemp("catalog")
+    catalog.save(CapabilityArtifact.model_validate(copy.deepcopy(raw_artifact)), root)
+    return root
+
+
+@pytest.fixture
+def approved_artifact(catalog_root, artifact) -> CapabilityArtifact:
+    """Approved through the real approval path, in the temp catalog."""
+    catalog.approve(artifact.id, "tester", artifact.version, root=catalog_root)
+    return catalog.load(artifact.id, artifact.version, root=catalog_root)
 
 
 # --------------------------------------------------------------------------- #

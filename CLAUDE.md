@@ -21,8 +21,8 @@ Build order differs from runtime order on purpose. Replay is built before discov
 | 0 | Schema, config, policy gate, redaction, pre-flight, extract, overrides, handoff controller, catalog, CLI shell | ✅ done + tested |
 | 1 | `mockbank/` legacy target app + fault injection | ✅ done + tested |
 | 2 | `cua/surface/`, `cua/session/`, network allowlist, evidence screenshots | ✅ done + tested |
-| 3 | `cua/replay/` resolver, checks (race), executor; enable `tests/test_replay_mockbank.py` | ⏳ next |
-| 4 | `cua/discovery/` + `cua/compiler/`; one real LLM run committed to `evidence/` | todo |
+| 3 | `cua/replay/` resolver, checks (race), executor; enable `tests/test_replay_mockbank.py` | ✅ done + tested |
+| 4 | `cua/discovery/` + `cua/compiler/`; one real LLM run committed to `evidence/` | ⏳ next |
 | 5 | Handoff wiring: operator in-process on :8001, recorder, resync | todo |
 | 6 | README, REPORT, curated evidence | todo |
 
@@ -121,7 +121,7 @@ tests/
   | `not_found` | business_outcome `MEMBER_NOT_FOUND` |
   | member 10003 | business_outcome `NO_SAVINGS_ACCOUNT` |
   | `notice` | success (dismissed) |
-  | `slow` | success (retried) |
+  | `slow` | success (waited until clear) |
   | `session_expired` | success (reauthenticated once) |
   | `denied` | failed `PERMISSION_DENIED` |
   | `error` | failed `APP_ERROR` |

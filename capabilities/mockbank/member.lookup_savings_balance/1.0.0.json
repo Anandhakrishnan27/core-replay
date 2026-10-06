@@ -294,7 +294,7 @@
         "timeout_ms": 500
       },
       "handler": {
-        "do": "retry_step",
+        "do": "wait_until_clear",
         "max_attempts": 3,
         "backoff_ms": 2000
       }

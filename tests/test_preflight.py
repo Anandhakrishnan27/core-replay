@@ -1,3 +1,5 @@
+import pytest
+
 from cua.replay.preflight import PreflightOk, preflight
 from cua.schema.artifact import CapabilityArtifact, FailureCategory
 
@@ -30,3 +32,17 @@ def test_irreversible_needs_confirmation(raw_artifact, policy):
     art = CapabilityArtifact.model_validate(raw_artifact)
     assert preflight(art, {"member_id": "10001"}, policy).category is FailureCategory.POLICY_VIOLATION
     assert isinstance(preflight(art, {"member_id": "10001"}, policy, confirmed=True), PreflightOk)
+
+
+def test_tenant_version_in_range_passes(approved_artifact, policy, tenant):
+    assert isinstance(
+        preflight(approved_artifact, {"member_id": "10001"}, policy, tenant=tenant), PreflightOk
+    )
+
+
+@pytest.mark.parametrize(
+    "update", [{"product_version": "3.0"}, {"product_version": "1.9"}, {"product": "other"}]
+)
+def test_tenant_app_binding_mismatch_rejected(approved_artifact, policy, tenant, update):
+    f = preflight(approved_artifact, {"member_id": "10001"}, policy, tenant=tenant.model_copy(update=update))
+    assert f.category is FailureCategory.APP_VERSION_MISMATCH

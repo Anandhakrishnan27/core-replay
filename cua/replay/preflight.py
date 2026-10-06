@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from cua.config import Policy
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
+
+from cua.config import Policy, Tenant
 from cua.schema.artifact import CapabilityArtifact, FailureCategory, ReviewStatus, RiskClass, ValueType
 from cua.schema.result import Failure
 
@@ -34,6 +37,7 @@ def preflight(
     *,
     mode: RunMode = "unattended",
     confirmed: bool = False,
+    tenant: Tenant | None = None,
 ) -> PreflightOk | Failure:
     def reject(category: FailureCategory, expected: str, observed: str) -> Failure:
         return Failure(category=category, expected=expected, observed=observed, retryable=False)
@@ -56,7 +60,26 @@ def preflight(
             "no confirmation",
         )
 
-    # 3. inputs vs contract (values are never echoed back: they may be PII)
+    # 3. app binding vs the tenant's configured product/version (the live fingerprint is checked after login)
+    if tenant is not None:
+        if tenant.product != artifact.app.product:
+            return reject(
+                FailureCategory.APP_VERSION_MISMATCH,
+                f"product '{artifact.app.product}'",
+                f"tenant '{tenant.tenant_id}' runs product '{tenant.product}'",
+            )
+        try:
+            in_range = Version(tenant.product_version) in SpecifierSet(artifact.app.version_range)
+        except (InvalidVersion, InvalidSpecifier):
+            in_range = False
+        if not in_range:
+            return reject(
+                FailureCategory.APP_VERSION_MISMATCH,
+                f"{artifact.app.product} version {artifact.app.version_range}",
+                f"tenant '{tenant.tenant_id}' runs version {tenant.product_version}",
+            )
+
+    # 4. inputs vs contract (values are never echoed back: they may be PII)
     declared = {i.name: i for i in artifact.contract.inputs}
     unknown = set(inputs) - set(declared)
     if unknown:

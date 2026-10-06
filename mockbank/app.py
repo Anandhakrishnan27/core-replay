@@ -38,6 +38,9 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 SESSION_COOKIE = "mb_session"
 SLOW_REFRESH_S = 2
+# Synthetic demo sign-on, used when MOCKBANK_USER / MOCKBANK_PASSWORD are unset (env / .env win).
+# Must match the defaults in cua/cli.py.
+DEMO_USER, DEMO_PASSWORD = "teller01", "mockbank-demo"
 
 # In-memory only: a restart signs everyone out, which is fine for a mock.
 _sessions: set[str] = set()
@@ -95,7 +98,8 @@ async def login_page(request: Request) -> HTMLResponse:
 @app.post("/login", response_model=None)
 async def login(request: Request) -> Response:
     form = await _form(request)
-    user, password = os.getenv("MOCKBANK_USER"), os.getenv("MOCKBANK_PASSWORD")
+    user = os.getenv("MOCKBANK_USER", DEMO_USER)
+    password = os.getenv("MOCKBANK_PASSWORD", DEMO_PASSWORD)
     ok = (
         bool(user and password)
         and secrets.compare_digest(form.get("userid", "").encode(), (user or "").encode())

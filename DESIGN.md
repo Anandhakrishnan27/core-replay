@@ -123,7 +123,7 @@ The contract lives in `cua/schema/result.py`, with examples in `examples/results
 |---|---|---|---|
 | **Rejected before UI** | bad input, draft artifact run unattended, irreversible capability without `--confirm` | never touch the app | `rejected` |
 | **Business outcome** | member not found, no savings account | stop, return the declared `outcome_code` | `business_outcome` |
-| **Recoverable** | system notice popup (dismiss), "Processing…" (retry), session expired (reauthenticate once) | bounded recovery, log a `Recovery`, re-enter the race | continues. If exhausted → `RECOVERY_EXHAUSTED` (session: `SESSION_EXPIRED`) → escalate |
+| **Recoverable** | system notice popup (dismiss), "Processing…" (wait until clear), session expired (reauthenticate once) | bounded recovery, log a `Recovery`, re-enter the race | continues. If exhausted → `RECOVERY_EXHAUSTED` (session: `SESSION_EXPIRED`) → escalate |
 | **Hard failure** | permission denied, app error, target not found or ambiguous, checkpoint failed, **unknown state** | stop, snapshot, `fail` or `escalate` | `failed` (step, expected, observed, evidence) |
 
 `UNKNOWN_STATE` is the most important category: the screen matches neither the checkpoint nor any known condition. Replay never guesses. It snapshots and escalates.
@@ -147,7 +147,7 @@ for step in steps:
     ── RACE until step.expect.timeout, polling every limits.poll_interval_ms ──
        1. watched conditions, in declared order → first match → handler
              business    → return business_outcome
-             recoverable → dismiss / retry_step / reauthenticate (bounded) → re-enter race
+             recoverable → dismiss / wait_until_clear / reauthenticate (bounded) → re-enter race
              hard        → fail | escalate
        2. step.expect satisfied (or none) → next step
        timeout, nothing matched → UNKNOWN_STATE → snapshot + escalate
@@ -264,3 +264,16 @@ Add a row each time you make a non-obvious decision. This feeds `REPORT.md` and 
 | 2026-10-06 | Optional `SessionControl` on Surface; `act()`/`read()` call `ensure_automation()` when set | Only in the executor | The handoff check sits at the same chokepoint as policy, so nothing can bypass it |
 | 2026-10-06 | Sign-on selectors are constants in `SessionProvider` (one provider per product) | In tenant config | Login is outside the artifact; a real deployment has one adapter per product or SSO |
 | 2026-10-06 | `SCHEMA_VERSION: Final` annotation | Leave mypy failing | Newer mypy rejected `str` → `Literal["1.0"]`; type-only fix, generated JSON schema unchanged |
+| 2026-10-06 | Handler `retry_step` renamed `wait_until_clear`: back off until the condition clears, then re-race; never repeat the action | Re-perform the step | "Processing" means the app already accepted the action; re-submitting could duplicate a write. Kept schema_version 1.0: no artifact other than the fixture exists yet |
+| 2026-10-06 | A `dismiss` counts as done only when the condition has cleared (bounded by step.timeout_ms) | Re-race right after the click | Found by test: the race saw the old notice before the navigation committed and clicked a detached button |
+| 2026-10-06 | Routing: escalate when a human at the screen could fix it (UNKNOWN_STATE, TARGET_*, RECOVERY_EXHAUSTED, SESSION_EXPIRED after failed re-auth, TIMEOUT, `escalate` handlers); fail when a click can't or mustn't (POLICY_VIOLATION, APP_VERSION_MISMATCH, CHECKPOINT_FAILED, `fail` handlers) | Escalate everything | A human must never override policy or bless a wrong read; principle documented in `executor.py` |
+| 2026-10-06 | Tenant `product_version` vs `app.version_range` checked in pre-flight (`rejected`, no browser) via `packaging`; live fingerprint after login stays (`failed`) | Fingerprint only | A known-wrong version is refused without touching the app; `packaging` is the PEP 440 reference implementation |
+| 2026-10-06 | Race deadline = `step.expect.timeout_ms`; a step without `expect` is one poll; `detect.timeout_ms` unused in the race | Per-condition deadlines | One deadline per step keeps precedence deterministic |
+| 2026-10-06 | A condition using `target_absent` must still hold one poll interval later | Accept first match | A header painted before its table must not read as NO_SAVINGS_ACCOUNT |
+| 2026-10-06 | Recovery budgets are per run, per condition | Per step | Strictly bounded however many steps a condition appears on |
+| 2026-10-06 | On target-resolution timeout, classify against `applies_to: all` conditions before TARGET_NOT_FOUND | Report drift directly | A late popup or error page is not locator drift |
+| 2026-10-06 | Decimal outputs returned as canonical strings (`"1203.55"`), dates as ISO strings | float | Money must stay exact; no schema change |
+| 2026-10-06 | `result.json` in evidence has outputs redacted by sensitivity; the caller's RunResult keeps real values | Same file for both | Evidence must hold no raw PII (invariant 4) |
+| 2026-10-06 | All templates resolved before the UI; `{{secrets.x}}` refused as unsupported | Env-var vault | No vault in this build; refuse rather than guess |
+| 2026-10-06 | Until Phase 5 the CLI uses handoff timeout 0 (no operator); scratch runs go to `evidence/_scratch/` | Wait 900 s for nobody | Escalation path is real (SessionControl), just unattended |
+| 2026-10-06 | Demo default sign-on `teller01` / `mockbank-demo` in `mockbank/app.py` and `cua/cli.py` when `MOCKBANK_USER` / `MOCKBANK_PASSWORD` are unset (env and `.env` still win) | Require `.env` | Runs out of the box. Synthetic credentials for a local mock only; the SessionProvider still reads only env, so a real deployment must set them |

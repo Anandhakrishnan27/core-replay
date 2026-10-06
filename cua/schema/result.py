@@ -40,7 +40,7 @@ class RunStatus(str, Enum):
 class Recovery(_Model):
     step_id: str
     condition_id: str
-    action: Literal["dismiss", "retry_step", "reauthenticate"]
+    action: Literal["dismiss", "wait_until_clear", "reauthenticate"]
     attempt: int
     succeeded: bool
 

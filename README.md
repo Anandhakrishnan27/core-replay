@@ -31,7 +31,7 @@ cp .env.example .env       # then fill in ANTHROPIC_API_KEY and CUA_MODEL
 | Variable | Needed for | Notes |
 |---|---|---|
 | `ANTHROPIC_API_KEY`, `CUA_MODEL` | discovery only | Replay never calls the LLM |
-| `MOCKBANK_USER`, `MOCKBANK_PASSWORD` | all runs | Synthetic; read only by the session provider |
+| `MOCKBANK_USER`, `MOCKBANK_PASSWORD` | optional | Synthetic; default `teller01` / `mockbank-demo` for the local mock bank. Read only by the session provider |
 | `CUA_REDACTION_SALT` | all runs | Salt for hashing PII in logs |
 | `CUA_HEADLESS` | handoff | Must be `false` for a human to take over |
 
@@ -41,11 +41,14 @@ cp .env.example .env       # then fill in ANTHROPIC_API_KEY and CUA_MODEL
 make mockbank              # terminal 1: target app on http://localhost:8000
 
 make demo-discover         # terminal 2: real LLM run → capabilities/.../x.y.z.json (draft)
-uv run cua approve mockbank.member.lookup_savings_balance --reviewer you
-make demo-replay           # replay with a NEW member id → success
+make demo-replay           # replay with a NEW member id → success (--supervised: artifact is still a draft)
 make demo-notfound         # → business_outcome MEMBER_NOT_FOUND
 make demo-handoff          # → escalation; open http://localhost:8001, take control, hand back
 ```
+
+The demo targets run `--supervised` for now, so draft artifacts may replay. Don't run `cua approve` on the
+hand-written fixture (`capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`): it rewrites the file.
+Approval for unattended replay comes back after Phase 4, on the generated artifact.
 
 **Running without live services:** replay needs no API key. A committed artifact plus the local mock bank are enough. `make test` runs everything offline.
 

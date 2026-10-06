@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -15,6 +16,10 @@ from cua import catalog
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 load_dotenv()
+# Demo-only defaults for the synthetic mock bank (must match mockbank/app.py). Env and .env win.
+# Real deployments set credentials in the environment; the SessionProvider still reads only env.
+os.environ.setdefault("MOCKBANK_USER", "teller01")
+os.environ.setdefault("MOCKBANK_PASSWORD", "mockbank-demo")
 
 
 def _parse_inputs(pairs: list[str]) -> dict[str, str]:
@@ -77,8 +82,12 @@ def replay(
     confirm: Annotated[bool, typer.Option(help="Confirm irreversible capability")] = False,
     fault: Annotated[str | None, typer.Option(help="Mock bank fault to inject")] = None,
 ) -> None:
-    """Deterministic replay (no LLM). Prints the RunResult JSON."""
+    """Deterministic replay (no LLM). Prints the RunResult JSON.
+
+    Exit code: 0 success or business outcome (not an error), 1 failed, 2 rejected.
+    """
     from cua.replay.executor import replay as run_replay
+    from cua.schema.result import RunStatus
 
     result = asyncio.run(
         run_replay(
@@ -89,9 +98,22 @@ def replay(
             mode="supervised" if supervised else "unattended",
             confirmed=confirm,
             fault=fault,
+            # TODO(phase-5): start the operator on :8001 and use policy.limits.handoff_timeout_s.
+            # Until then no operator is attached, so an escalation ends at once as `timed_out`.
+            handoff_timeout_s=0,
         )
     )
     typer.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+    detail = result.outcome_code or (result.failure.category.value if result.failure else "")
+    color = {
+        RunStatus.success: "green",
+        RunStatus.business_outcome: "cyan",
+        RunStatus.failed: "red",
+        RunStatus.rejected: "yellow",
+    }[result.status]
+    typer.secho(f"{result.status.value}  {detail}  evidence: {result.evidence_dir}", fg=color, err=True)
+    codes = {RunStatus.success: 0, RunStatus.business_outcome: 0, RunStatus.failed: 1, RunStatus.rejected: 2}
+    raise typer.Exit(codes[result.status])
 
 
 if __name__ == "__main__":
