@@ -212,7 +212,7 @@
         },
         {
           "strategy": "css",
-          "selector": "#sysnotice input[value='OK']"
+          "selector": "div.sysnotice input[value='OK']"
         }
       ],
       "rationale": "Interstitial is shown at random after navigation; OK is its only control."
