@@ -19,8 +19,8 @@ Build order differs from runtime order on purpose. Replay is built before discov
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Schema, config, policy gate, redaction, pre-flight, extract, overrides, handoff controller, catalog, CLI shell | ✅ done + tested |
-| 1 | `mockbank/` legacy target app + fault injection | ⏳ next |
-| 2 | `cua/surface/`, `cua/session/`, network allowlist, evidence screenshots | todo |
+| 1 | `mockbank/` legacy target app + fault injection | ✅ done + tested |
+| 2 | `cua/surface/`, `cua/session/`, network allowlist, evidence screenshots | ⏳ next |
 | 3 | `cua/replay/` resolver, checks (race), executor; enable `tests/test_replay_mockbank.py` | todo |
 | 4 | `cua/discovery/` + `cua/compiler/`; one real LLM run committed to `evidence/` | todo |
 | 5 | Handoff wiring: operator in-process on :8001, recorder, resync | todo |

@@ -1,1 +1,8 @@
-<!-- TODO(phase-1): nav.html, legacy markup: tables, no ids, no <label for>. See mockbank/app.py docstring. -->
+{% extends "_base.html" %}
+{% block body %}
+<table width="100%" cellpadding="2" cellspacing="0">
+  <tr><td class="hdr">MockBank Core</td></tr>
+  <tr><td><a href="/console/home" target="main">Home</a></td></tr>
+  <tr><td><a href="/console/mbrlookup" target="main">Member Lookup</a></td></tr>
+</table>
+{% endblock %}

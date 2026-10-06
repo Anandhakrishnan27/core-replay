@@ -237,4 +237,10 @@ Add a row each time you make a non-obvious decision. This feeds `REPORT.md` and 
 | | Irreversible steps gated in pre-flight, not mid-run | Escalate when reached | Never stop halfway through a transaction |
 | | Session expiry recoverable via SessionProvider (reauthenticate once) | Always escalate | Credentials never touch the LLM or artifact; one bounded retry is safe |
 | | Member id and balances classified `pii` | `internal` | Regulated financial data: conservative by default |
-| | Tenant overrides limited to `targets` / `conditions` | Free-form patches | The contract (API) must be identical for every tenant |
+| | Tenant overrides limited to `targets` / `conditions` | Free-form patches | The contract (API) must be identical for every tenant || 2026-10-06 | Mockbank faults are deterministic; `notice`, `session_expired`, `maint` fire once per browser context (`mb_once` cookie) | Random interstitials; server-side flags | Replay tests must not flake; a cookie scopes "once" to one Playwright context and survives re-login in it |
+| 2026-10-06 | `session_expired` fires on opening the lookup form, not on the search POST | Expire on search | After reauthenticate, retrying the nav click works; retrying `submit_search` can't, because the form and the typed value are gone |
+| 2026-10-06 | `maint` fires once and offers "Try Again" | Always on | The human in the handoff demo needs a way to fix the screen so resync can succeed |
+| 2026-10-06 | Follow-up GETs (slow refresh, maint retry) carry an opaque single-use ticket, never the member number | Member number in the query string | No PII in URLs, so none in logs, history or evidence |
+| 2026-10-06 | Notice renders inside `main`; an empty `frame_path` means "top document, then all frames, must match exactly once" (Phase 2 resolver) | Add `frame_path: ["main"]` to the fixture | Interstitials can appear in any frame; no fixture change needed |
+| 2026-10-06 | Harness injects `--fault` by setting the `mb_fault` cookie on the browser context | Navigate to `/console?fault=x` | The artifact's `navigate` URL stays untouched |
+| 2026-10-06 | Mockbank parses urlencoded forms with `urllib.parse` | Add `python-multipart` | No new dependency for two small legacy forms |

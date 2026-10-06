@@ -1,1 +1,12 @@
-<!-- TODO(phase-1): notice.html, legacy markup: tables, no ids, no <label for>. See mockbank/app.py docstring. -->
+{% extends "_base.html" %}
+{% block body %}
+<div class="sysnotice">
+<table width="100%" cellpadding="3" cellspacing="0">
+  <tr><td><b>System Notice</b></td></tr>
+  <tr><td>Branch hours change on Monday. Please review the bulletin board.</td></tr>
+  <tr><td align="right">
+    <form method="get" action="/console/mbrlookup"><input type="submit" value="OK"></form>
+  </td></tr>
+</table>
+</div>
+{% endblock %}
