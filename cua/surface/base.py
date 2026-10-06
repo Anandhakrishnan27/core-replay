@@ -64,3 +64,7 @@ class TargetNotFound(Exception): ...
 
 
 class TargetAmbiguous(Exception): ...
+
+
+class ActionFailed(Exception):
+    """The app refused or timed out on an action. Message never contains the typed value."""

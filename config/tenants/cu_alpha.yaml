@@ -6,3 +6,6 @@ credentials:
   username_env: MOCKBANK_USER
   password_env: MOCKBANK_PASSWORD
 overrides: {}
+# PII on screen that is not an artifact target: caption/value cells (member number, name on Member Summary).
+mask_selectors:
+  - "td.cap + td"

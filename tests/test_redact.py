@@ -29,3 +29,13 @@ def test_mapping():
 
 def test_different_values_different_hashes():
     assert hash_value("10001", "m") != hash_value("10002", "m")
+
+
+def test_redact_digit_runs():
+    from cua.safety.redact import redact_digit_runs
+
+    out = redact_digit_runs("Member 10001 owes $2,450.17 and $97.40; v2.3, 180 px, MB-5001")
+    for raw in ("10001", "2,450.17", "97.40", "5001"):
+        assert raw not in out
+    assert "v2.3" in out and "180 px" in out  # fewer than 4 digits: kept
+    assert redact_digit_runs("10001") == redact_digit_runs("10001")  # stable hash

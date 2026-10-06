@@ -75,12 +75,18 @@ core-replay/
 
 ```python
 class Surface(Protocol):
-    async def observe(self, with_screenshot: bool = False) -> Observation: ...         # a11y tree + refs (+ masked screenshot)
-    async def resolve(self, target_id: str, target: Target) -> Resolved: ...           # ranked locators + MatchRule → exactly one element
-    async def act(self, action: Action, resolved: Resolved | None, risk: RiskClass, *, value: str | None) -> None: ...  # policy-gated
+    async def observe(
+        self, with_screenshot: bool = False
+    ) -> Observation: ...  # a11y tree + refs (+ masked screenshot)
+    async def resolve(
+        self, target_id: str, target: Target
+    ) -> Resolved: ...  # ranked locators + MatchRule → exactly one element
+    async def act(
+        self, action: Action, resolved: Resolved | None, risk: RiskClass, *, value: str | None
+    ) -> None: ...  # policy-gated
     async def check(self, predicate: Predicate, targets: dict[str, Target]) -> bool: ...
     async def read(self, resolved: Resolved) -> str: ...
-    async def snapshot(self, reason: str, *, dom: bool = False) -> list[str]: ...     # masked evidence paths
+    async def snapshot(self, reason: str, *, dom: bool = False) -> list[str]: ...  # masked evidence paths
 ```
 
 `PlaywrightWebSurface` implements all six. A `DesktopSurface` would implement the same six over Windows UIA or macOS AX: `role`, `label` and `text` map directly, and `table_cell` maps to grid patterns. The artifact does not change.
@@ -183,7 +189,9 @@ PAUSED | HUMAN ──abort() / timeout──► ABORTED → RunResult failed, ha
 | Risk gate | Discovery: irreversible → `NeedsHuman` (escalate). Replay: irreversible capability needs `--confirm` **and** an approved artifact, checked in pre-flight. A false stop costs a minute; a wrong commit costs a remediation. |
 | Credentials | `SessionProvider` reads env only. Never sent to the LLM, logged, or stored in artifacts. |
 | No literals in artifacts | Schema validator (templates only) |
-| Redaction | `pii` → salted hash in logs; `secret` → `«secret:name»`; human-typed → length only; `sensitive` targets masked in screenshots; pre-flight errors never echo values |
+| Redaction | `pii` → salted hash in logs; `secret` → `«secret:name»`; human-typed → length only; pre-flight errors never echo values |
+| Screenshots and DOM dumps | Screenshots mask every element any locator of a `sensitive` target matches, plus the tenant's `mask_selectors` (PII on screen that is not a target, e.g. member name and number). DOM dumps drop form values, replace masked regions with `«masked»` and hash digit runs of 4+ digits. **Limit:** only listed regions are masked; PII elsewhere on a page (new fields after an app upgrade, free-text notes) is visible in screenshots until a tenant adds a selector. |
+| Playwright traces | Off by default; explicit opt-in only; written to `evidence/_scratch/` (git-ignored), never committed. They contain unmasked page content, typed values and session cookies. Login and re-authentication run with tracing fully stopped, so credentials are not in them. |
 | Untrusted page content | Wrapped as `<page untrusted="true">` in prompts; policy blocks the consequences regardless of what the model is told |
 | Limits | Discovery uses synthetic data only. In production, observations sent to the model would also need masking. |
 
@@ -244,3 +252,15 @@ Add a row each time you make a non-obvious decision. This feeds `REPORT.md` and 
 | 2026-10-06 | Notice renders inside `main`; an empty `frame_path` means "top document, then all frames, must match exactly once" (Phase 2 resolver) | Add `frame_path: ["main"]` to the fixture | Interstitials can appear in any frame; no fixture change needed |
 | 2026-10-06 | Harness injects `--fault` by setting the `mb_fault` cookie on the browser context | Navigate to `/console?fault=x` | The artifact's `navigate` URL stays untouched |
 | 2026-10-06 | Mockbank parses urlencoded forms with `urllib.parse` | Add `python-multipart` | No new dependency for two small legacy forms |
+| 2026-10-06 | Ranked-locator loop and MatchRule live in `Surface.resolve()`; `replay/resolver.py` (Phase 3) only maps exceptions to `Failure` | Loop in the resolver | Resolution touches the browser, and only Surface may; discovery and resync reuse it |
+| 2026-10-06 | `table_cell` / `near_text` are custom Playwright selector engines | Generated XPath | Column-index arithmetic and quote escaping in XPath 1.0 are fragile; engines give real lazy Locators (count, auto-wait, screenshot masks) |
+| 2026-10-06 | `resolve()` and `check()` are single-shot snapshots (element handles, no waiting); waiting is `poll_until` in the caller | Waiting inside each call | One bounded wait in one place; the race in Phase 3 stays deterministic |
+| 2026-10-06 | `url_matches` checks the top URL **and every frame URL** | Top URL only | In a frameset, an expired session shows `/login` inside `main` while the top URL stays `/console` |
+| 2026-10-06 | `check()` returns False on transient errors (frame mid-navigation), for every predicate kind including `target_absent` | Raise / return True for absent | Never guess: the caller polls again |
+| 2026-10-06 | `target_absent` = no locator finds any visible element; ambiguous is not absent | `not resolves()` | A text_pattern miss or a duplicate must not read as "no savings account" |
+| 2026-10-06 | Network allowlist and tracing live on the context (`surface/browser.py`), not on Surface | Install from Surface | Must be in place before login's first request |
+| 2026-10-06 | Tenant `mask_selectors` (CSS, all frames) for on-screen PII that is not a target; cu_alpha: `td.cap + td` | Mask whole frames; accept the leak | Keeps evidence useful while covering name and member number; the limit is documented in §7 |
+| 2026-10-06 | Tracing off by default; `untraced()` fully stops tracing during login | Stop/start trace chunks | Found by test: the network recorder survives chunk boundaries and wrote the login POST body (password) into the next chunk |
+| 2026-10-06 | Optional `SessionControl` on Surface; `act()`/`read()` call `ensure_automation()` when set | Only in the executor | The handoff check sits at the same chokepoint as policy, so nothing can bypass it |
+| 2026-10-06 | Sign-on selectors are constants in `SessionProvider` (one provider per product) | In tenant config | Login is outside the artifact; a real deployment has one adapter per product or SSO |
+| 2026-10-06 | `SCHEMA_VERSION: Final` annotation | Leave mypy failing | Newer mypy rejected `str` → `Literal["1.0"]`; type-only fix, generated JSON schema unchanged |

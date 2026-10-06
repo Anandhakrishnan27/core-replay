@@ -60,6 +60,9 @@ class Tenant(_Cfg):
     base_url: str
     credentials: Credentials
     overrides: dict[str, dict[str, Any]] = {}
+    # CSS selectors (applied in every frame) for PII that is on screen but is not an artifact target.
+    # Masked in screenshots; text replaced with «masked» in DOM dumps.
+    mask_selectors: list[str] = []
 
 
 def load_policy(path: Path | None = None) -> Policy:

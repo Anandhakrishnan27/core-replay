@@ -20,8 +20,8 @@ Build order differs from runtime order on purpose. Replay is built before discov
 |---|---|---|
 | 0 | Schema, config, policy gate, redaction, pre-flight, extract, overrides, handoff controller, catalog, CLI shell | ✅ done + tested |
 | 1 | `mockbank/` legacy target app + fault injection | ✅ done + tested |
-| 2 | `cua/surface/`, `cua/session/`, network allowlist, evidence screenshots | ⏳ next |
-| 3 | `cua/replay/` resolver, checks (race), executor; enable `tests/test_replay_mockbank.py` | todo |
+| 2 | `cua/surface/`, `cua/session/`, network allowlist, evidence screenshots | ✅ done + tested |
+| 3 | `cua/replay/` resolver, checks (race), executor; enable `tests/test_replay_mockbank.py` | ⏳ next |
 | 4 | `cua/discovery/` + `cua/compiler/`; one real LLM run committed to `evidence/` | todo |
 | 5 | Handoff wiring: operator in-process on :8001, recorder, resync | todo |
 | 6 | README, REPORT, curated evidence | todo |
@@ -88,7 +88,8 @@ tests/
 4. **No secrets or raw PII in artifacts, logs, screenshots or evidence.**
    - Artifact `fill` / `navigate` values are templates only: `{{inputs.x}}`, `{{tenant.x}}`, `{{secrets.x}}`.
    - The logger redacts on write: PII is a salted hash, secrets become `«secret:name»`, human-typed values become `«redacted:len=n»`.
-   - Screenshots mask targets marked `sensitive`.
+   - Screenshots mask targets marked `sensitive` plus the tenant's `mask_selectors`; DOM dumps are redacted.
+   - Playwright traces are opt-in, written only to `evidence/_scratch/`, never committed.
    - Error messages never echo input values.
 5. **Credentials come only from env via the SessionProvider.** They are never sent to the LLM, never logged, never committed. Never read or modify `.env`.
 6. **Business outcomes are not failures.** Every terminal path returns a `RunResult` with exactly one status: `success | business_outcome | failed | rejected`. Use only `FailureCategory` values for failures.

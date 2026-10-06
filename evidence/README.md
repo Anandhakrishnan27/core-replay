@@ -14,5 +14,8 @@ Each run folder contains:
 - `run.jsonl`: one JSON event per line
 - `result.json`: the `RunResult`
 - `steps/NN_<step_id>.png`: masked screenshots
-- `failure.dom.html`: on failure only
-- `trace.zip`: the Playwright trace (`npx playwright show-trace trace.zip`)
+- `steps/NN_<reason>.dom.<frame>.html`: redacted DOM per frame, on failure only
+
+Playwright traces are **not** committed. They are off by default and, when enabled with the explicit flag,
+are written to `evidence/_scratch/traces/` (git-ignored), because they contain unmasked page content and
+typed values.

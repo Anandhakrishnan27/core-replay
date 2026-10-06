@@ -32,6 +32,9 @@ packages = ["cua", "mockbank"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# one event loop for the whole run, so a single Chromium is shared by all browser tests
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 
 [tool.ruff]
@@ -45,6 +48,7 @@ ignore = ["UP042"]
 
 [tool.ruff.lint.per-file-ignores]
 "cua/handoff/recorder.py" = ["E501"]  # embedded JavaScript
+"cua/surface/engines.py" = ["E501"]  # embedded JavaScript
 
 [tool.mypy]
 python_version = "3.11"
