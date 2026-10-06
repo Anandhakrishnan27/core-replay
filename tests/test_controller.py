@@ -42,6 +42,25 @@ async def test_full_handoff_cycle():
     assert c.epoch == 4
 
 
+async def test_resync_failure_returns_to_human():
+    c = SessionControl("r1")
+    first = asyncio.create_task(c.request_intervention(_req(), timeout_s=5))
+    await asyncio.sleep(0)
+    c.take_control("op")
+    c.hand_back()
+    await first
+    assert c.state is ControlState.RESUMING
+    # executor's resync found no satisfied checkpoint -> ask the human again, same session
+    second = asyncio.create_task(c.request_intervention(_req(), timeout_s=5))
+    await asyncio.sleep(0)
+    assert c.state is ControlState.PAUSED
+    c.take_control("op")
+    c.hand_back()
+    await second
+    c.resumed()
+    c.ensure_automation()
+
+
 async def test_abort():
     c = SessionControl("r1")
     waiter = asyncio.create_task(c.request_intervention(_req(), timeout_s=5))

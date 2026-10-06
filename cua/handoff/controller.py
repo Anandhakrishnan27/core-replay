@@ -2,7 +2,8 @@
 
 States:
     AUTOMATION ──request_intervention()──► PAUSED ──take_control(op)──► HUMAN
-    HUMAN ──hand_back()──► RESUMING ──resumed()──► AUTOMATION
+    HUMAN ──hand_back()──► RESUMING ──resumed()──► AUTOMATION          (resync found a satisfied checkpoint)
+    RESUMING ──request_intervention()──► PAUSED                         (resync failed: ask the human again)
     PAUSED | HUMAN ──abort() / timeout──► ABORTED
 
 Invariants:
@@ -64,8 +65,12 @@ class SessionControl:
             raise NotInControl(f"automation may not act while state is {self.state.value} ({self.holder})")
 
     async def request_intervention(self, request: InterventionRequest, timeout_s: float) -> None:
-        """Pause automation and wait (same session stays open) until a human hands back or aborts."""
-        self._move({ControlState.AUTOMATION}, ControlState.PAUSED, "none")
+        """Pause automation and wait (same session stays open) until a human hands back or aborts.
+
+        Also called from RESUMING when resync fails, with `expected_state` telling the operator what
+        the automation needs to see before it can continue.
+        """
+        self._move({ControlState.AUTOMATION, ControlState.RESUMING}, ControlState.PAUSED, "none")
         self.request = request
         self._released.clear()
         try:
