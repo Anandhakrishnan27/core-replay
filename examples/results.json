@@ -1,0 +1,66 @@
+{
+  "success": {
+    "run_id": "rep_20261001T1830Z_a01",
+    "mode": "replay",
+    "capability_id": "mockbank.member.lookup_savings_balance",
+    "capability_version": "1.0.0",
+    "tenant_id": "cu_alpha",
+    "status": "success",
+    "outcome_code": "SUCCESS",
+    "outputs": { "savings_balance": "2450.17", "account_status": "Active" },
+    "recoveries": [
+      { "step_id": "go_to_lookup", "condition_id": "system_notice", "action": "dismiss", "attempt": 1, "succeeded": true }
+    ],
+    "started_at": "2026-10-01T18:30:02Z",
+    "duration_ms": 3120,
+    "evidence_dir": "evidence/replay_rep_20261001T1830Z_a01"
+  },
+
+  "member_not_found": {
+    "run_id": "rep_20261001T1831Z_a02",
+    "mode": "replay",
+    "capability_id": "mockbank.member.lookup_savings_balance",
+    "capability_version": "1.0.0",
+    "tenant_id": "cu_alpha",
+    "status": "business_outcome",
+    "outcome_code": "MEMBER_NOT_FOUND",
+    "outputs": {},
+    "started_at": "2026-10-01T18:31:10Z",
+    "duration_ms": 2240,
+    "evidence_dir": "evidence/replay_rep_20261001T1831Z_a02"
+  },
+
+  "hard_failure": {
+    "run_id": "rep_20261001T1832Z_a03",
+    "mode": "replay",
+    "capability_id": "mockbank.member.lookup_savings_balance",
+    "capability_version": "1.0.0",
+    "tenant_id": "cu_alpha",
+    "status": "failed",
+    "failure": {
+      "category": "UNKNOWN_STATE",
+      "step_id": "submit_search",
+      "step_intent": "Run the search",
+      "expected": "member_header and savings_balance_cell visible within 15000ms",
+      "observed": "Neither checkpoint nor any known condition matched. Page title 'Maintenance Window'; url /console/maint",
+      "retryable": true,
+      "evidence": ["step_04_submit_search.png", "step_04_submit_search.dom.html", "run.jsonl"]
+    },
+    "handoffs": [
+      {
+        "intervention_id": "int_9c21",
+        "reason": "UNKNOWN_STATE at step submit_search",
+        "step_id": "submit_search",
+        "operator_id": "op_demo",
+        "requested_at": "2026-10-01T18:32:25Z",
+        "taken_at": "2026-10-01T18:33:01Z",
+        "returned_at": "2026-10-01T18:33:40Z",
+        "resolution": "aborted",
+        "human_actions": []
+      }
+    ],
+    "started_at": "2026-10-01T18:32:08Z",
+    "duration_ms": 92000,
+    "evidence_dir": "evidence/replay_rep_20261001T1832Z_a03"
+  }
+}

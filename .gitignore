@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+# scratch runs; curated demo runs under evidence/ ARE committed
+evidence/_scratch/
+.DS_Store

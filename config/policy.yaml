@@ -1,0 +1,28 @@
+# Guardrail policy. Enforced inside Surface for BOTH discovery (LLM) and replay.
+version: 1
+
+allowed_origins:
+  - "http://localhost:8000"
+  - "http://127.0.0.1:8000"
+
+allowed_actions: [navigate, click, fill, select, press, extract]
+
+risk:
+  # Buttons whose accessible name matches one of these are classified irreversible by the compiler.
+  irreversible_button_names: ["submit", "confirm", "open account", "transfer", "delete", "post", "approve"]
+  discovery_irreversible: escalate              # LLM may never commit on its own
+  replay_irreversible: require_confirmation     # caller --confirm AND artifact approved, else rejected in pre-flight
+
+unattended_requires_review_status: approved
+
+redaction:
+  hash_salt_env: CUA_REDACTION_SALT
+  mask_sensitive_targets_in_screenshots: true
+
+limits:
+  discovery_max_steps: 25
+  discovery_timeout_s: 300
+  repeated_observation_limit: 3
+  step_timeout_ms: 10000
+  poll_interval_ms: 250
+  handoff_timeout_s: 900

@@ -1,0 +1,15 @@
+# Same vendor product, different configuration: shows per-tenant overrides (design / stretch goal).
+tenant_id: cu_beta
+product: mockbank_core
+product_version: "2.4"
+base_url: "http://localhost:8000"
+credentials:
+  username_env: MOCKBANK_USER
+  password_env: MOCKBANK_PASSWORD
+overrides:
+  mockbank.member.lookup_savings_balance:
+    targets:
+      member_id_field:
+        locators:
+          - { strategy: label, label: "Account Holder #" }
+          - { strategy: near_text, anchor_text: "Account Holder #", relation: following_input, role: textbox }

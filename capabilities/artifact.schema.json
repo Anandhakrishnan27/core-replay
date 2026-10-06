@@ -1,0 +1,1443 @@
+{
+  "$defs": {
+    "AppBinding": {
+      "additionalProperties": false,
+      "description": "Binds the capability to a VENDOR PRODUCT + version range, not to a tenant.",
+      "properties": {
+        "product": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Product",
+          "type": "string"
+        },
+        "version_range": {
+          "description": "PEP 440-style specifier, e.g. '>=2.0,<3.0'.",
+          "title": "Version Range",
+          "type": "string"
+        },
+        "surface": {
+          "enum": [
+            "web",
+            "legacy_web",
+            "desktop"
+          ],
+          "title": "Surface",
+          "type": "string"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/Check",
+          "description": "Proves we are on the expected product/version before step 1."
+        }
+      },
+      "required": [
+        "product",
+        "version_range",
+        "surface",
+        "fingerprint"
+      ],
+      "title": "AppBinding",
+      "type": "object"
+    },
+    "CapabilityPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "max_risk": {
+          "$ref": "#/$defs/RiskClass",
+          "description": "Declared highest step risk; validated against the steps."
+        },
+        "requires_confirmation": {
+          "description": "Caller must pass an explicit confirmation to run.",
+          "title": "Requires Confirmation",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "max_risk",
+        "requires_confirmation"
+      ],
+      "title": "CapabilityPolicy",
+      "type": "object"
+    },
+    "Check": {
+      "additionalProperties": false,
+      "properties": {
+        "all_of": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "target_absent": "#/$defs/TargetAbsent",
+                "target_visible": "#/$defs/TargetVisible",
+                "text_present": "#/$defs/TextPresent",
+                "url_matches": "#/$defs/UrlMatches"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/UrlMatches"
+              },
+              {
+                "$ref": "#/$defs/TargetVisible"
+              },
+              {
+                "$ref": "#/$defs/TargetAbsent"
+              },
+              {
+                "$ref": "#/$defs/TextPresent"
+              }
+            ]
+          },
+          "title": "All Of",
+          "type": "array"
+        },
+        "any_of": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "target_absent": "#/$defs/TargetAbsent",
+                "target_visible": "#/$defs/TargetVisible",
+                "text_present": "#/$defs/TextPresent",
+                "url_matches": "#/$defs/UrlMatches"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/UrlMatches"
+              },
+              {
+                "$ref": "#/$defs/TargetVisible"
+              },
+              {
+                "$ref": "#/$defs/TargetAbsent"
+              },
+              {
+                "$ref": "#/$defs/TextPresent"
+              }
+            ]
+          },
+          "title": "Any Of",
+          "type": "array"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "title": "Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "title": "Check",
+      "type": "object"
+    },
+    "Click": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "click",
+          "default": "click",
+          "title": "Type",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "Click",
+      "type": "object"
+    },
+    "ConditionClass": {
+      "enum": [
+        "business_outcome",
+        "recoverable",
+        "hard_failure"
+      ],
+      "title": "ConditionClass",
+      "type": "string"
+    },
+    "Contract": {
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/InputSpec"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/OutputSpec"
+          },
+          "title": "Outputs",
+          "type": "array"
+        },
+        "outcomes": {
+          "items": {
+            "$ref": "#/$defs/OutcomeSpec"
+          },
+          "minItems": 1,
+          "title": "Outcomes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "inputs",
+        "outputs",
+        "outcomes"
+      ],
+      "title": "Contract",
+      "type": "object"
+    },
+    "CoordinateLocator": {
+      "additionalProperties": false,
+      "description": "Last resort (e.g. canvas/Citrix). Normalized to viewport. Must pass MatchRule checks.",
+      "properties": {
+        "strategy": {
+          "const": "coordinates",
+          "default": "coordinates",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "CoordinateLocator",
+      "type": "object"
+    },
+    "CssLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "const": "css",
+          "default": "css",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector"
+      ],
+      "title": "CssLocator",
+      "type": "object"
+    },
+    "Dismiss": {
+      "additionalProperties": false,
+      "properties": {
+        "do": {
+          "const": "dismiss",
+          "default": "dismiss",
+          "title": "Do",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "max_times": {
+          "default": 2,
+          "minimum": 1,
+          "title": "Max Times",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "Dismiss",
+      "type": "object"
+    },
+    "Escalate": {
+      "additionalProperties": false,
+      "properties": {
+        "do": {
+          "const": "escalate",
+          "default": "escalate",
+          "title": "Do",
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/FailureCategory",
+          "description": "Reported if the human aborts instead of resolving."
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "reason"
+      ],
+      "title": "Escalate",
+      "type": "object"
+    },
+    "Extract": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "extract",
+          "default": "extract",
+          "title": "Type",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "output": {
+          "title": "Output",
+          "type": "string"
+        },
+        "parse": {
+          "default": "text",
+          "enum": [
+            "text",
+            "integer",
+            "decimal",
+            "currency",
+            "date"
+          ],
+          "title": "Parse",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "output"
+      ],
+      "title": "Extract",
+      "type": "object"
+    },
+    "Fail": {
+      "additionalProperties": false,
+      "properties": {
+        "do": {
+          "const": "fail",
+          "default": "fail",
+          "title": "Do",
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/FailureCategory"
+        }
+      },
+      "required": [
+        "category"
+      ],
+      "title": "Fail",
+      "type": "object"
+    },
+    "FailureCategory": {
+      "enum": [
+        "INPUT_INVALID",
+        "POLICY_VIOLATION",
+        "APP_VERSION_MISMATCH",
+        "TARGET_NOT_FOUND",
+        "TARGET_AMBIGUOUS",
+        "CHECKPOINT_FAILED",
+        "UNKNOWN_STATE",
+        "SESSION_EXPIRED",
+        "PERMISSION_DENIED",
+        "APP_ERROR",
+        "TIMEOUT",
+        "RECOVERY_EXHAUSTED"
+      ],
+      "title": "FailureCategory",
+      "type": "string"
+    },
+    "Fill": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "fill",
+          "default": "fill",
+          "title": "Type",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "value": {
+          "description": "Must be a single template: {{inputs.x}} | {{tenant.x}} | {{secrets.x}}",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "value"
+      ],
+      "title": "Fill",
+      "type": "object"
+    },
+    "InputSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ValueType"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity",
+          "default": "internal"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Regex checked BEFORE touching the UI -> INPUT_INVALID on mismatch.",
+          "title": "Pattern"
+        },
+        "example": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Must be synthetic. Shown to reviewers/agents.",
+          "title": "Example"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "description"
+      ],
+      "title": "InputSpec",
+      "type": "object"
+    },
+    "KnownCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "classification": {
+          "$ref": "#/$defs/ConditionClass"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "detect": {
+          "$ref": "#/$defs/Check"
+        },
+        "handler": {
+          "discriminator": {
+            "mapping": {
+              "dismiss": "#/$defs/Dismiss",
+              "escalate": "#/$defs/Escalate",
+              "fail": "#/$defs/Fail",
+              "reauthenticate": "#/$defs/Reauthenticate",
+              "retry_step": "#/$defs/RetryStep",
+              "return_outcome": "#/$defs/ReturnOutcome"
+            },
+            "propertyName": "do"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReturnOutcome"
+            },
+            {
+              "$ref": "#/$defs/Dismiss"
+            },
+            {
+              "$ref": "#/$defs/RetryStep"
+            },
+            {
+              "$ref": "#/$defs/Reauthenticate"
+            },
+            {
+              "$ref": "#/$defs/Fail"
+            },
+            {
+              "$ref": "#/$defs/Escalate"
+            }
+          ],
+          "title": "Handler"
+        },
+        "applies_to": {
+          "anyOf": [
+            {
+              "const": "all",
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "default": "all",
+          "description": "'all' or a list of step ids after which to watch for this condition.",
+          "title": "Applies To"
+        }
+      },
+      "required": [
+        "classification",
+        "description",
+        "detect",
+        "handler"
+      ],
+      "title": "KnownCondition",
+      "type": "object"
+    },
+    "LabelLocator": {
+      "additionalProperties": false,
+      "description": "Form control by its associated <label> / accessible label.",
+      "properties": {
+        "strategy": {
+          "const": "label",
+          "default": "label",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "exact": {
+          "default": false,
+          "title": "Exact",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "LabelLocator",
+      "type": "object"
+    },
+    "MatchRule": {
+      "additionalProperties": false,
+      "description": "Verifies the resolved element really is the intended one (guards against 'found the wrong thing').",
+      "properties": {
+        "unique": {
+          "default": true,
+          "title": "Unique",
+          "type": "boolean"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enabled"
+        },
+        "text_pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Regex the element's text/value must match.",
+          "title": "Text Pattern"
+        }
+      },
+      "title": "MatchRule",
+      "type": "object"
+    },
+    "Navigate": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "navigate",
+          "default": "navigate",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "description": "Template, e.g. '{{tenant.base_url}}/members/search'. Never a tenant literal.",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "Navigate",
+      "type": "object"
+    },
+    "NearTextLocator": {
+      "additionalProperties": false,
+      "description": "For unlabeled legacy inputs: the input that follows / sits right of some visible text.",
+      "properties": {
+        "strategy": {
+          "const": "near_text",
+          "default": "near_text",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "anchor_text": {
+          "title": "Anchor Text",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "following_input",
+            "right_of",
+            "below"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "required": [
+        "anchor_text",
+        "relation"
+      ],
+      "title": "NearTextLocator",
+      "type": "object"
+    },
+    "OutcomeKind": {
+      "enum": [
+        "success",
+        "business"
+      ],
+      "title": "OutcomeKind",
+      "type": "string"
+    },
+    "OutcomeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Code",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/OutcomeKind"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "returns": {
+          "description": "Output names populated for this outcome.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Returns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "kind",
+        "description"
+      ],
+      "title": "OutcomeSpec",
+      "type": "object"
+    },
+    "OutputSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ValueType"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity",
+          "default": "internal"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "description"
+      ],
+      "title": "OutputSpec",
+      "type": "object"
+    },
+    "Press": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "press",
+          "default": "press",
+          "title": "Type",
+          "type": "string"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "Press",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "discovery_run_id": {
+          "title": "Discovery Run Id",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "title": "Recorded At",
+          "type": "string"
+        },
+        "compiler_version": {
+          "title": "Compiler Version",
+          "type": "string"
+        },
+        "human_assisted_steps": {
+          "description": "Step ids that came from a human during a handoff.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Human Assisted Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "discovery_run_id",
+        "model",
+        "recorded_at",
+        "compiler_version"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Reauthenticate": {
+      "additionalProperties": false,
+      "description": "Re-login via the session provider (credentials from env), then retry the step.\n\nIf re-auth fails or the condition persists after `max_attempts`, the executor escalates\nwith category SESSION_EXPIRED.",
+      "properties": {
+        "do": {
+          "const": "reauthenticate",
+          "default": "reauthenticate",
+          "title": "Do",
+          "type": "string"
+        },
+        "max_attempts": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        }
+      },
+      "title": "Reauthenticate",
+      "type": "object"
+    },
+    "RetryStep": {
+      "additionalProperties": false,
+      "properties": {
+        "do": {
+          "const": "retry_step",
+          "default": "retry_step",
+          "title": "Do",
+          "type": "string"
+        },
+        "max_attempts": {
+          "default": 3,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "backoff_ms": {
+          "default": 1000,
+          "minimum": 0,
+          "title": "Backoff Ms",
+          "type": "integer"
+        }
+      },
+      "title": "RetryStep",
+      "type": "object"
+    },
+    "ReturnOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "do": {
+          "const": "return_outcome",
+          "default": "return_outcome",
+          "title": "Do",
+          "type": "string"
+        },
+        "outcome": {
+          "title": "Outcome",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome"
+      ],
+      "title": "ReturnOutcome",
+      "type": "object"
+    },
+    "Review": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/ReviewStatus",
+          "default": "draft"
+        },
+        "reviewed_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed By"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        }
+      },
+      "title": "Review",
+      "type": "object"
+    },
+    "ReviewStatus": {
+      "enum": [
+        "draft",
+        "approved",
+        "deprecated"
+      ],
+      "title": "ReviewStatus",
+      "type": "string"
+    },
+    "RiskClass": {
+      "enum": [
+        "read",
+        "reversible",
+        "irreversible"
+      ],
+      "title": "RiskClass",
+      "type": "string"
+    },
+    "RoleLocator": {
+      "additionalProperties": false,
+      "description": "Accessibility role + accessible name. Works for web AND desktop (UIA/AX).",
+      "properties": {
+        "strategy": {
+          "const": "role",
+          "default": "role",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "exact": {
+          "default": true,
+          "title": "Exact",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "role"
+      ],
+      "title": "RoleLocator",
+      "type": "object"
+    },
+    "SelectOption": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "select",
+          "default": "select",
+          "title": "Type",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "option": {
+          "title": "Option",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "option"
+      ],
+      "title": "SelectOption",
+      "type": "object"
+    },
+    "Sensitivity": {
+      "enum": [
+        "public",
+        "internal",
+        "pii",
+        "secret"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Human-readable purpose. Also the context given to a human on escalation.",
+          "title": "Intent",
+          "type": "string"
+        },
+        "action": {
+          "discriminator": {
+            "mapping": {
+              "click": "#/$defs/Click",
+              "extract": "#/$defs/Extract",
+              "fill": "#/$defs/Fill",
+              "navigate": "#/$defs/Navigate",
+              "press": "#/$defs/Press",
+              "select": "#/$defs/SelectOption"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Navigate"
+            },
+            {
+              "$ref": "#/$defs/Click"
+            },
+            {
+              "$ref": "#/$defs/Fill"
+            },
+            {
+              "$ref": "#/$defs/SelectOption"
+            },
+            {
+              "$ref": "#/$defs/Press"
+            },
+            {
+              "$ref": "#/$defs/Extract"
+            }
+          ],
+          "title": "Action"
+        },
+        "risk": {
+          "$ref": "#/$defs/RiskClass",
+          "default": "read"
+        },
+        "expect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Check"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Checkpoint: postcondition asserted after the action."
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "title": "Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "intent",
+        "action"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "TableCellLocator": {
+      "additionalProperties": false,
+      "description": "Legacy-table friendly: the cell in the row containing X, under column header Y.\n\nSurvives column reordering and row reordering; needs no ids or classes.",
+      "properties": {
+        "strategy": {
+          "const": "table_cell",
+          "default": "table_cell",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "table_has_header": {
+          "title": "Table Has Header",
+          "type": "string"
+        },
+        "row_contains": {
+          "title": "Row Contains",
+          "type": "string"
+        },
+        "column_header": {
+          "title": "Column Header",
+          "type": "string"
+        }
+      },
+      "required": [
+        "table_has_header",
+        "row_contains",
+        "column_header"
+      ],
+      "title": "TableCellLocator",
+      "type": "object"
+    },
+    "Target": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "locators": {
+          "description": "Tried IN ORDER; first one that resolves AND passes `match` wins.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "coordinates": "#/$defs/CoordinateLocator",
+                "css": "#/$defs/CssLocator",
+                "label": "#/$defs/LabelLocator",
+                "near_text": "#/$defs/NearTextLocator",
+                "role": "#/$defs/RoleLocator",
+                "table_cell": "#/$defs/TableCellLocator",
+                "text": "#/$defs/TextLocator",
+                "xpath": "#/$defs/XPathLocator"
+              },
+              "propertyName": "strategy"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RoleLocator"
+              },
+              {
+                "$ref": "#/$defs/LabelLocator"
+              },
+              {
+                "$ref": "#/$defs/TextLocator"
+              },
+              {
+                "$ref": "#/$defs/TableCellLocator"
+              },
+              {
+                "$ref": "#/$defs/NearTextLocator"
+              },
+              {
+                "$ref": "#/$defs/CssLocator"
+              },
+              {
+                "$ref": "#/$defs/XPathLocator"
+              },
+              {
+                "$ref": "#/$defs/CoordinateLocator"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Locators",
+          "type": "array"
+        },
+        "frame_path": {
+          "description": "Frame names/url-fragments to descend (legacy framesets/iframes).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Frame Path",
+          "type": "array"
+        },
+        "match": {
+          "$ref": "#/$defs/MatchRule",
+          "default": {
+            "unique": true,
+            "visible": true,
+            "enabled": null,
+            "text_pattern": null
+          }
+        },
+        "sensitive": {
+          "default": false,
+          "description": "Masked in screenshots and evidence.",
+          "title": "Sensitive",
+          "type": "boolean"
+        },
+        "rationale": {
+          "description": "Why these locators, in this order, are robust. For reviewers.",
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "locators",
+        "rationale"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
+    "TargetAbsent": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "target_absent",
+          "default": "target_absent",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "TargetAbsent",
+      "type": "object"
+    },
+    "TargetVisible": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "target_visible",
+          "default": "target_visible",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "TargetVisible",
+      "type": "object"
+    },
+    "TextLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "const": "text",
+          "default": "text",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "exact": {
+          "default": false,
+          "title": "Exact",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TextLocator",
+      "type": "object"
+    },
+    "TextPresent": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "text_present",
+          "default": "text_present",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "within": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional target id to scope the search.",
+          "title": "Within"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TextPresent",
+      "type": "object"
+    },
+    "UrlMatches": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "url_matches",
+          "default": "url_matches",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pattern": {
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern"
+      ],
+      "title": "UrlMatches",
+      "type": "object"
+    },
+    "ValueType": {
+      "enum": [
+        "string",
+        "integer",
+        "decimal",
+        "boolean",
+        "date"
+      ],
+      "title": "ValueType",
+      "type": "string"
+    },
+    "XPathLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "const": "xpath",
+          "default": "xpath",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "xpath": {
+          "title": "Xpath",
+          "type": "string"
+        }
+      },
+      "required": [
+        "xpath"
+      ],
+      "title": "XPathLocator",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "title": "Id",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "app": {
+      "$ref": "#/$defs/AppBinding"
+    },
+    "contract": {
+      "$ref": "#/$defs/Contract"
+    },
+    "policy": {
+      "$ref": "#/$defs/CapabilityPolicy"
+    },
+    "targets": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Target"
+      },
+      "title": "Targets",
+      "type": "object"
+    },
+    "conditions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/KnownCondition"
+      },
+      "title": "Conditions",
+      "type": "object"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    },
+    "success": {
+      "$ref": "#/$defs/Check",
+      "description": "Final checkpoint that must hold before returning SUCCESS."
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "review": {
+      "$ref": "#/$defs/Review",
+      "default": {
+        "status": "draft",
+        "reviewed_by": null,
+        "reviewed_at": null,
+        "notes": null
+      }
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "title",
+    "description",
+    "app",
+    "contract",
+    "policy",
+    "targets",
+    "steps",
+    "success",
+    "provenance"
+  ],
+  "title": "CapabilityArtifact",
+  "type": "object"
+}

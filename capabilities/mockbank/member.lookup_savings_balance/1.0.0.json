@@ -1,0 +1,458 @@
+{
+  "schema_version": "1.0",
+  "id": "mockbank.member.lookup_savings_balance",
+  "version": "1.0.0",
+  "title": "Look up a member's savings balance",
+  "description": "Searches for a member by member number in the back-office console and returns the current balance of their primary share savings account. Read-only.",
+  "app": {
+    "product": "mockbank_core",
+    "version_range": ">=2.0,<3.0",
+    "surface": "legacy_web",
+    "fingerprint": {
+      "all_of": [
+        {
+          "kind": "text_present",
+          "text": "MockBank Core"
+        },
+        {
+          "kind": "target_visible",
+          "target": "nav_member_lookup"
+        }
+      ],
+      "timeout_ms": 8000
+    }
+  },
+  "contract": {
+    "inputs": [
+      {
+        "name": "member_id",
+        "type": "string",
+        "description": "Member number, 5-10 digits.",
+        "sensitivity": "pii",
+        "pattern": "^[0-9]{5,10}$",
+        "example": "10001"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "savings_balance",
+        "type": "decimal",
+        "description": "Current balance of the primary share savings account.",
+        "sensitivity": "pii"
+      },
+      {
+        "name": "account_status",
+        "type": "string",
+        "description": "Account status as shown, e.g. 'Active', 'Dormant'.",
+        "sensitivity": "internal"
+      }
+    ],
+    "outcomes": [
+      {
+        "code": "SUCCESS",
+        "kind": "success",
+        "description": "Member found; balance returned.",
+        "returns": [
+          "savings_balance",
+          "account_status"
+        ]
+      },
+      {
+        "code": "MEMBER_NOT_FOUND",
+        "kind": "business",
+        "description": "No member exists with that number."
+      },
+      {
+        "code": "NO_SAVINGS_ACCOUNT",
+        "kind": "business",
+        "description": "Member exists but has no share savings account."
+      }
+    ]
+  },
+  "policy": {
+    "max_risk": "reversible",
+    "requires_confirmation": false
+  },
+  "targets": {
+    "nav_member_lookup": {
+      "description": "'Member Lookup' link in the left navigation frame",
+      "frame_path": [
+        "nav"
+      ],
+      "locators": [
+        {
+          "strategy": "role",
+          "role": "link",
+          "name": "Member Lookup"
+        },
+        {
+          "strategy": "text",
+          "text": "Member Lookup",
+          "exact": true
+        },
+        {
+          "strategy": "css",
+          "selector": "a[href*='mbrlookup']"
+        }
+      ],
+      "rationale": "Link text is the operator-visible label and is stable across releases; href fragment is a fallback that survives relabeling by a tenant."
+    },
+    "member_id_field": {
+      "description": "Member number text input on the lookup form",
+      "frame_path": [
+        "main"
+      ],
+      "locators": [
+        {
+          "strategy": "label",
+          "label": "Member Number"
+        },
+        {
+          "strategy": "near_text",
+          "anchor_text": "Member Number",
+          "relation": "following_input",
+          "role": "textbox"
+        },
+        {
+          "strategy": "css",
+          "selector": "form[name='lookup'] input[name='mbrno']"
+        }
+      ],
+      "match": {
+        "unique": true,
+        "visible": true,
+        "enabled": true
+      },
+      "sensitive": true,
+      "rationale": "The legacy form has no <label for>, so the label strategy may miss; near_text anchors on the visible caption in the same table row. The input name is a server-side field name that rarely changes, so it is a strong last fallback."
+    },
+    "search_button": {
+      "description": "Search submit button on the lookup form",
+      "frame_path": [
+        "main"
+      ],
+      "locators": [
+        {
+          "strategy": "role",
+          "role": "button",
+          "name": "Search"
+        },
+        {
+          "strategy": "css",
+          "selector": "form[name='lookup'] input[type='submit']"
+        }
+      ],
+      "match": {
+        "unique": true,
+        "visible": true,
+        "enabled": true
+      },
+      "rationale": "Accessible name is the visible caption. Scoped CSS fallback avoids matching the header's global search."
+    },
+    "member_header": {
+      "description": "Member summary header on the detail page",
+      "frame_path": [
+        "main"
+      ],
+      "locators": [
+        {
+          "strategy": "text",
+          "text": "Member Summary"
+        },
+        {
+          "strategy": "xpath",
+          "xpath": "//td[contains(@class,'hdr')][contains(.,'Member Summary')]"
+        }
+      ],
+      "rationale": "Used only as a checkpoint; the section title is stable."
+    },
+    "savings_balance_cell": {
+      "description": "Balance cell for the 'Share Savings' row in the Accounts table",
+      "frame_path": [
+        "main"
+      ],
+      "locators": [
+        {
+          "strategy": "table_cell",
+          "table_has_header": "Account Type",
+          "row_contains": "Share Savings",
+          "column_header": "Balance"
+        }
+      ],
+      "match": {
+        "unique": true,
+        "visible": true,
+        "text_pattern": "^-?\\$?[0-9,]+\\.[0-9]{2}$"
+      },
+      "sensitive": true,
+      "rationale": "Row-by-label and column-by-header survives column reordering and extra rows; text_pattern guards against reading the wrong cell."
+    },
+    "savings_status_cell": {
+      "description": "Status cell for the 'Share Savings' row in the Accounts table",
+      "frame_path": [
+        "main"
+      ],
+      "locators": [
+        {
+          "strategy": "table_cell",
+          "table_has_header": "Account Type",
+          "row_contains": "Share Savings",
+          "column_header": "Status"
+        }
+      ],
+      "rationale": "Same row/column anchoring as the balance cell."
+    },
+    "notice_ok_button": {
+      "description": "OK button on the 'System Notice' interstitial",
+      "locators": [
+        {
+          "strategy": "role",
+          "role": "button",
+          "name": "OK"
+        },
+        {
+          "strategy": "css",
+          "selector": "#sysnotice input[value='OK']"
+        }
+      ],
+      "rationale": "Interstitial is shown at random after navigation; OK is its only control."
+    }
+  },
+  "conditions": {
+    "member_not_found": {
+      "classification": "business_outcome",
+      "description": "Search returned no member",
+      "detect": {
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "No member found"
+          }
+        ],
+        "timeout_ms": 1500
+      },
+      "handler": {
+        "do": "return_outcome",
+        "outcome": "MEMBER_NOT_FOUND"
+      },
+      "applies_to": [
+        "submit_search"
+      ]
+    },
+    "no_savings_account": {
+      "classification": "business_outcome",
+      "description": "Member has no Share Savings row",
+      "detect": {
+        "all_of": [
+          {
+            "kind": "target_visible",
+            "target": "member_header"
+          },
+          {
+            "kind": "target_absent",
+            "target": "savings_balance_cell"
+          }
+        ],
+        "timeout_ms": 1500
+      },
+      "handler": {
+        "do": "return_outcome",
+        "outcome": "NO_SAVINGS_ACCOUNT"
+      },
+      "applies_to": [
+        "submit_search"
+      ]
+    },
+    "system_notice": {
+      "classification": "recoverable",
+      "description": "Random 'System Notice' interstitial dialog",
+      "detect": {
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "System Notice"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "dismiss",
+        "target": "notice_ok_button",
+        "max_times": 2
+      }
+    },
+    "still_processing": {
+      "classification": "recoverable",
+      "description": "Server-side 'Processing, please wait' page",
+      "detect": {
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "Processing, please wait"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "retry_step",
+        "max_attempts": 3,
+        "backoff_ms": 2000
+      }
+    },
+    "session_expired": {
+      "classification": "recoverable",
+      "description": "Session timed out; login page shown. Re-authenticate via session provider once, else escalate.",
+      "detect": {
+        "any_of": [
+          {
+            "kind": "url_matches",
+            "pattern": "/login"
+          },
+          {
+            "kind": "text_present",
+            "text": "Your session has expired"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "reauthenticate",
+        "max_attempts": 1
+      }
+    },
+    "permission_denied": {
+      "classification": "hard_failure",
+      "description": "Service account lacks access",
+      "detect": {
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "You are not authorized"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "fail",
+        "category": "PERMISSION_DENIED"
+      }
+    },
+    "app_error": {
+      "classification": "hard_failure",
+      "description": "Generic application error page",
+      "detect": {
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "An unexpected error has occurred"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "fail",
+        "category": "APP_ERROR"
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": "open_lookup",
+      "intent": "Open the member lookup form",
+      "action": {
+        "type": "navigate",
+        "url": "{{tenant.base_url}}/console"
+      },
+      "risk": "read"
+    },
+    {
+      "id": "go_to_lookup",
+      "intent": "Click 'Member Lookup' in the navigation",
+      "action": {
+        "type": "click",
+        "target": "nav_member_lookup"
+      },
+      "risk": "read",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "target_visible",
+            "target": "member_id_field"
+          }
+        ]
+      }
+    },
+    {
+      "id": "enter_member_id",
+      "intent": "Type the member number",
+      "action": {
+        "type": "fill",
+        "target": "member_id_field",
+        "value": "{{inputs.member_id}}"
+      },
+      "risk": "reversible"
+    },
+    {
+      "id": "submit_search",
+      "intent": "Run the search",
+      "action": {
+        "type": "click",
+        "target": "search_button"
+      },
+      "risk": "read",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "target_visible",
+            "target": "member_header"
+          },
+          {
+            "kind": "target_visible",
+            "target": "savings_balance_cell"
+          }
+        ],
+        "timeout_ms": 15000
+      }
+    },
+    {
+      "id": "read_balance",
+      "intent": "Read the savings balance",
+      "action": {
+        "type": "extract",
+        "target": "savings_balance_cell",
+        "output": "savings_balance",
+        "parse": "currency"
+      },
+      "risk": "read"
+    },
+    {
+      "id": "read_status",
+      "intent": "Read the savings account status",
+      "action": {
+        "type": "extract",
+        "target": "savings_status_cell",
+        "output": "account_status",
+        "parse": "text"
+      },
+      "risk": "read"
+    }
+  ],
+  "success": {
+    "all_of": [
+      {
+        "kind": "target_visible",
+        "target": "member_header"
+      }
+    ]
+  },
+  "provenance": {
+    "discovery_run_id": "disc_20261001T1812Z_7f3a",
+    "model": "claude-sonnet (via Anthropic API)",
+    "recorded_at": "2026-10-01T18:12:44Z",
+    "compiler_version": "0.1.0",
+    "human_assisted_steps": []
+  },
+  "review": {
+    "status": "draft"
+  }
+}

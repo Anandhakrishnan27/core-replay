@@ -1,0 +1,8 @@
+tenant_id: cu_alpha
+product: mockbank_core
+product_version: "2.3"
+base_url: "http://localhost:8000"
+credentials:
+  username_env: MOCKBANK_USER
+  password_env: MOCKBANK_PASSWORD
+overrides: {}
