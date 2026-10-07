@@ -85,8 +85,9 @@ _SERIALIZE_JS = """({paths, selectors}) => {
   return clone.outerHTML;
 }"""
 _RAW_BLOCK_RE = re.compile(r"(<(style|script)\b.*?</\2>)", re.S | re.I)
-# Discovery has no `sensitive` targets yet, so its screenshots mask every leaf element showing a digit
-# and every text-entry control. Over-masking is the safe direction.
+# Every screenshot (discovery AND replay) masks every leaf element showing a digit and every text-entry
+# control: data on screen that no artifact target names (e.g. another account's balance) must not leak.
+# Over-masking is the safe direction.
 _DIGIT_RE = re.compile(r"\d")
 _LEAF = "body *:not(:has(*))"
 _TEXT_ENTRY = (
@@ -489,9 +490,8 @@ class PlaywrightWebSurface:
         return [t for t in self.targets.values() if t.sensitive]
 
     def _mask_locators(self) -> list[PWLocator]:
-        """Everything ANY locator of a sensitive target matches, plus tenant mask_selectors, in all frames.
-
-        Over-masking is the safe direction.
+        """Masks, in all frames: everything ANY locator of a sensitive target matches, tenant mask_selectors,
+        every leaf element showing a digit, and every text-entry control. Over-masking is the safe direction.
         """
         masks: list[PWLocator] = []
         for target in self._sensitive():
@@ -503,9 +503,8 @@ class PlaywrightWebSurface:
                 )
         for frame in self.page.frames:
             masks.extend(frame.locator(sel) for sel in self.mask_selectors)
-            if self.mode == "discovery":
-                masks.append(frame.locator(_LEAF, has_text=_DIGIT_RE))
-                masks.append(frame.locator(_TEXT_ENTRY))
+            masks.append(frame.locator(_LEAF, has_text=_DIGIT_RE))
+            masks.append(frame.locator(_TEXT_ENTRY))
         return masks
 
     async def _dom(self, frame: Frame) -> str:

@@ -422,6 +422,7 @@ async def test_member_page_snapshot_has_no_member_name_number_or_balances(
     png = decode_png((run_logger.dir / files[0]).read_bytes())
     regions = [main.locator("td.cap + td").nth(0), main.locator("td.cap + td").nth(1)]
     regions.append(main.locator("td.amt").nth(1))  # Share Savings row (second row for 10002)
+    regions.append(main.locator("td.amt").nth(0))  # Checking balance: not a target, masked by the digit rule
     for loc in regions:
         assert region_is_mask_color(png, await loc.bounding_box())
 
