@@ -9,6 +9,12 @@
         handler: return_outcome | fail | escalate | dismiss | wait_until_clear | reauthenticate
     artifact.success holds → RunResult(success, outputs)
 
+Escalation (operator attached): pause on the SAME session → human takes control, fixes, hands back →
+resync: resume after the furthest `expect` checkpoint (from the current step on) that holds; none →
+retry the current step if its action never ran, else ask again with the expected state. Bounded
+(_MAX_RESYNCS hand-backs per run); never resumes past an irreversible step a human performed.
+No operator → the escalation ends the run at once (resolution aborted, "no operator available").
+
 Every terminal path returns a RunResult. Evidence (run.jsonl, masked screenshots, failure DOM,
 effective artifact, redacted result.json) is written under <evidence_root>/replay_<run_id>/.
 """
@@ -35,6 +41,8 @@ from cua.config import EVIDENCE_DIR, ROOT, Policy, Tenant, load_policy, load_ten
 from cua.evidence.logger import RunLogger
 from cua.handoff.controller import ControlState, HandoffAborted, NotInControl, SessionControl
 from cua.handoff.models import InterventionRequest
+from cua.handoff.operator import OperatorServer
+from cua.handoff.recorder import HumanRecorder
 from cua.replay.checks import Matched, Satisfied, evaluate, match_condition, race
 from cua.replay.extract import ParseError, parse_value
 from cua.replay.overrides import apply_overrides
@@ -94,6 +102,18 @@ _PARSE_TYPE = {
     "currency": ValueType.decimal,
     "date": ValueType.date,
 }
+
+
+_MAX_RESYNCS = 3  # hand-backs per run; then the run fails (resolution aborted)
+_RESYNC_WAIT_MS = 5_000  # after hand-back: how long a checkpoint may take to appear (page still loading)
+
+
+class _Resume(Exception):
+    """A handoff was resolved: continue the step loop at `index` (== len(steps) → final check)."""
+
+    def __init__(self, index: int) -> None:
+        super().__init__(index)
+        self.index = index
 
 
 class _Stop(Exception):
@@ -184,6 +204,8 @@ async def replay(
     confirmed: bool = False,
     fault: str | None = None,
     handoff_timeout_s: float | None = None,
+    operator: OperatorServer | None = None,
+    headed: bool = False,
     evidence_root: Path = SCRATCH_RUNS,
 ) -> RunResult:
     """CLI entry: load config + catalog, then execute()."""
@@ -196,6 +218,8 @@ async def replay(
         confirmed=confirmed,
         fault=fault,
         handoff_timeout_s=handoff_timeout_s,
+        operator=operator,
+        headed=headed,
         evidence_root=evidence_root,
     )
 
@@ -211,9 +235,15 @@ async def execute(
     fault: str | None = None,
     browser: Browser | None = None,
     handoff_timeout_s: float | None = None,
+    operator: OperatorServer | None = None,
+    headed: bool = False,
     evidence_root: Path = SCRATCH_RUNS,
 ) -> RunResult:
-    """Run one capability. A browser is launched (unless given) only after pre-flight passes."""
+    """Run one capability. A browser is launched (unless given) only after pre-flight passes.
+
+    With an `operator`, the run registers its live SessionControl there and escalations wait (up to
+    the handoff timeout) for a human; without one, an escalation ends the run at once.
+    """
     started_at = datetime.now(UTC)
     t0 = time.monotonic()
     logger = RunLogger(evidence_root, _new_run_id(), "replay")
@@ -303,7 +333,7 @@ async def execute(
     try:
         async with AsyncExitStack() as stack:
             if browser is None:
-                browser = await stack.enter_async_context(start_browser())
+                browser = await stack.enter_async_context(start_browser(headed=headed))
             session = await stack.enter_async_context(open_session(browser, policy, gate, logger))
             run = _Run(
                 effective,
@@ -319,7 +349,11 @@ async def execute(
                 handoff_timeout_s=(
                     policy.limits.handoff_timeout_s if handoff_timeout_s is None else handoff_timeout_s
                 ),
+                operator=operator,
             )
+            if operator is not None:
+                entry = operator.register(logger.run_id, run.control, logger.dir, mode="replay")
+                entry.human_actions = run.human_actions  # live, redacted: the operator page lists them
             try:
                 outcome_code, outputs = await run.go(fault)
             except _Stop as stop:
@@ -327,6 +361,9 @@ async def execute(
             except Exception as e:  # never leave a run without a RunResult (invariant 6)
                 evidence = await run.snapshot("internal_error", dom=True)
                 return finish(RunStatus.failed, failure=_internal(e, evidence))
+            finally:
+                if operator is not None:
+                    operator.unregister(logger.run_id)
             return finish(RunStatus.success, outcome_code=outcome_code, outputs=outputs)
     except Exception as e:  # browser failed to start / context failed to close
         return finish(RunStatus.failed, failure=_internal(e, []))
@@ -363,6 +400,7 @@ class _Run:
         handoffs: list[Handoff],
         confirmed: bool,
         handoff_timeout_s: float,
+        operator: OperatorServer | None = None,
     ) -> None:
         self.artifact = artifact
         self.tenant = tenant
@@ -387,6 +425,16 @@ class _Run:
             mask_selectors=tenant.mask_selectors,
             control=self.control,
         )
+        self.operator = operator
+        # Only with an operator: someone can take control, so their actions must be captured.
+        self.recorder = (
+            HumanRecorder(session.context, self.control, logger, mask_selectors=tenant.mask_selectors)
+            if operator is not None
+            else None
+        )
+        self.human_actions = self.recorder.actions if self.recorder else []
+        self.resyncs = 0  # hand-backs so far (bounded by _MAX_RESYNCS)
+        self.acted = False  # has the CURRENT step's action been attempted? (resync may retry it if not)
         self.attempts: Counter[str] = Counter()  # recovery attempts per condition, per run
         self.outputs: dict[str, Scalar] = {}
         self.output_specs = {o.name: o for o in artifact.contract.outputs}
@@ -394,10 +442,18 @@ class _Run:
     # ---- top level ------------------------------------------------------------------------------ #
 
     async def go(self, fault: str | None) -> tuple[str, dict[str, Scalar]]:
+        if self.recorder is not None:
+            await self.recorder.install()  # before login: every document gets the listener
         await self._login(fault)
         await self._fingerprint()
-        for step in self.artifact.steps:
-            await self._run_step(step)
+        steps = self.artifact.steps
+        i = 0
+        while i < len(steps):  # index-based: a resolved handoff resumes at the resynced step
+            try:
+                await self._run_step(steps[i])
+                i += 1
+            except _Resume as r:
+                i = r.index
         return await self._final_check()
 
     async def snapshot(self, reason: str, *, dom: bool = False) -> list[str]:
@@ -474,6 +530,7 @@ class _Run:
         self.logger.event(
             "step_started", step.id, intent=step.intent, action=step.action.type, risk=step.risk.value
         )
+        self.acted = False
         await self._perform(step)
         while True:
             t0 = time.monotonic()
@@ -523,6 +580,7 @@ class _Run:
             await self._handle(step, cid)  # recoveries return; the action has not run yet, so resolve again
 
         self.control.ensure_automation()
+        self.acted = True  # attempted counts: a failed click may still have reached the app
         try:
             if isinstance(action, Extract):
                 assert resolved is not None
@@ -685,7 +743,10 @@ class _Run:
         expected: str | None = None,
         observed: str | None = None,
     ) -> NoReturn:
-        """Snapshot, pause automation on the SAME session, and wait for a human (bounded)."""
+        """Snapshot, pause automation on the SAME session, wait for a human (bounded), then resync.
+
+        Raises _Resume(index) when the run can continue, otherwise _Stop (failed). See the module doc.
+        """
         evidence = await self.snapshot(f"{step.id}_escalation", dom=True)
         expected = expected or _describe(step.expect)
         request = InterventionRequest(
@@ -709,28 +770,146 @@ class _Run:
             category=category.value,
             reason=reason,
             expected_state=expected,
-            timeout_s=self.handoff_timeout_s,
+            timeout_s=self.handoff_timeout_s if self.recorder else 0,
         )
-        resolution: Literal["aborted", "timed_out"]
-        try:
-            await self.control.request_intervention(request, self.handoff_timeout_s)
-            # TODO(phase-5): resync to the furthest satisfied checkpoint, control.resumed(), continue.
-            # Until then nothing can hand back (no operator), and a hand-back ends the run.
-            resolution = "aborted"
-        except HandoffAborted as e:
-            resolution = "timed_out" if "timed out" in str(e) else "aborted"
-        operator = next((h for _, s, h in self.control.history if s is ControlState.HUMAN), None)
+
+        def end(
+            resolution: Literal["completed_by_human", "aborted", "timed_out"],
+            detail: str,
+            fail_as: tuple[FailureCategory, str, str] | None = None,
+        ) -> NoReturn:
+            self._record_handoff(step, first, history_from, actions_from, resolution, detail=detail)
+            cat, exp, obs = fail_as or (category, expected, observed or reason)
+            self._fail(step, cat, exp, obs, evidence)
+
+        first = request  # the handoff record keeps the original reason and time; re-asks update `request`
+        history_from, actions_from = len(self.control.history), len(self.human_actions)
+        if self.recorder is None:
+            end("aborted", "no operator available")
+        if self.resyncs >= _MAX_RESYNCS:
+            end("aborted", f"hand-back budget used up ({_MAX_RESYNCS} per run)")
+        await self.recorder.arm()  # documents opened before install listen too
+
+        k = self.artifact.steps.index(step)
+        while True:
+            try:
+                await self.control.request_intervention(request, self.handoff_timeout_s)
+            except HandoffAborted as e:
+                timed_out = "timed out" in str(e)
+                end("timed_out" if timed_out else "aborted", str(e))
+            self.resyncs += 1
+            index = await self._resync(k)
+            if index is not None:
+                break
+            if self.resyncs >= _MAX_RESYNCS:
+                end("aborted", f"no checkpoint held after {self.resyncs} hand-back(s)")
+            # Ask again, saying exactly what automation needs to see (RESUMING → PAUSED).
+            evidence = await self.snapshot(f"{step.id}_resync_failed", dom=True)
+            request = request.model_copy(
+                update={
+                    "reason": "after hand-back the screen matches no checkpoint from this step on: "
+                    "bring it to the expected state, then hand back",
+                    "expected_state": self._expected_from(k),
+                    "current_url": _safe_url(self.session.page.url),
+                    "screenshot": evidence[0] if evidence else None,
+                    "requested_at": datetime.now(UTC),
+                }
+            )
+            self.logger.event(
+                "resync_failed", step.id, hand_backs=self.resyncs, expected_state=request.expected_state
+            )
+
+        # Steps the run will not perform itself. A human must never have committed one for us.
+        skipped = self.artifact.steps[k + (1 if self.acted else 0) : index]
+        committed = next((s for s in skipped if s.risk is RiskClass.irreversible), None)
+        if committed is not None:
+            end(
+                "completed_by_human",
+                f"irreversible step '{committed.id}' was completed by a human",
+                (
+                    FailureCategory.POLICY_VIOLATION,
+                    f"automation performs irreversible step '{committed.id}' itself",
+                    "after hand-back its checkpoint already held: a human completed it",
+                ),
+            )
+        self.control.resumed()
+        resumed_at = self.artifact.steps[index].id if index < len(self.artifact.steps) else None
+        self._record_handoff(step, first, history_from, actions_from, "resumed", resumed_at_step=resumed_at)
+        await self.snapshot(f"{step.id}_resumed")
+        raise _Resume(index)
+
+    async def _resync(self, k: int) -> int | None:
+        """After hand-back: index to continue at, or None if automation can't tell where it is.
+
+        Never trusts "I fixed it": the furthest step j >= k whose `expect` checkpoint holds → j + 1.
+        None holds → retry step k if its action never ran, else None (ask the human again).
+        """
+        await self.surface.settle(_RESYNC_WAIT_MS)
+        steps = self.artifact.steps
+        found: int | None = None
+
+        async def furthest() -> bool:
+            nonlocal found
+            for j in range(len(steps) - 1, k - 1, -1):
+                expect = steps[j].expect
+                if expect is not None and await evaluate(self.surface, expect, self.targets):
+                    found = j
+                    return True
+            return False
+
+        await poll_until(furthest, _RESYNC_WAIT_MS, self.poll_ms)
+        index = found + 1 if found is not None else (None if self.acted else k)
+        self.logger.event(
+            "resync",
+            steps[k].id,
+            checkpoint=steps[found].id if found is not None else None,
+            resume_at=(steps[index].id if index < len(steps) else "success_check")
+            if index is not None
+            else None,
+        )
+        return index
+
+    def _expected_from(self, k: int) -> str:
+        """The nearest checkpoint automation can resume from, in words (for the operator)."""
+        nxt = next((s for s in self.artifact.steps[k:] if s.expect is not None), None)
+        if nxt is None:
+            return f"final success check: {_describe(self.artifact.success)}"
+        return f"checkpoint of step '{nxt.id}' ({nxt.intent}): {_describe(nxt.expect)}"
+
+    def _record_handoff(
+        self,
+        step: Step,
+        request: InterventionRequest,
+        history_from: int,
+        actions_from: int,
+        resolution: Literal["resumed", "completed_by_human", "aborted", "timed_out"],
+        *,
+        resumed_at_step: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        history = self.control.history[history_from:]
+        taken = [(ts, h) for ts, s, h in history if s is ControlState.HUMAN]
+        returned = [ts for ts, s, _ in history if s is ControlState.RESUMING]
         self.handoffs.append(
             Handoff(
                 intervention_id=request.intervention_id,
-                reason=reason,
+                reason=request.reason,
                 step_id=step.id,
-                operator_id=operator.removeprefix("human:") if operator else None,
+                operator_id=taken[-1][1].removeprefix("human:") if taken else None,
                 requested_at=request.requested_at,
+                taken_at=taken[0][0] if taken else None,
+                returned_at=returned[-1] if returned else None,
                 resolution=resolution,
+                resumed_at_step=resumed_at_step,
+                human_actions=self.human_actions[actions_from:],
             )
         )
         self.logger.event(
-            "handoff_resolved", step.id, intervention_id=request.intervention_id, resolution=resolution
+            "handoff_resolved",
+            step.id,
+            intervention_id=request.intervention_id,
+            resolution=resolution,
+            resumed_at_step=resumed_at_step,
+            detail=detail,
+            human_actions=len(self.human_actions) - actions_from,
         )
-        self._fail(step, category, expected, observed or reason, evidence)

@@ -4,7 +4,7 @@ Runs the real executor (cua.replay.executor.execute) in supervised mode, which m
   - a NEW browser context and a fresh SessionProvider login: nothing (cookies, session, open dialogs)
     carries over from the discovery run, so the artifact cannot pass on leftover state
   - the same pre-flight as a catalog replay (inputs, template resolution, app version)
-  - no operator: an escalation ends the self-test at once (handoff timeout 0)
+  - no operator: an escalation ends the self-test at once (handoff resolution aborted)
 It passes only if
   1. the run ends `success`
   2. every output equals the value discovery read (compared in memory; only true/false is recorded)
@@ -98,8 +98,7 @@ async def self_test(
         inputs,
         mode="supervised",
         browser=browser,  # a browser PROCESS may be shared; execute() always opens a new context + login
-        handoff_timeout_s=0,
-        evidence_root=evidence_root,
+        evidence_root=evidence_root,  # no operator: an escalation ends the self-test at once
     )
     if run.status is not RunStatus.success:
         detail = run.outcome_code or (run.failure.category.value if run.failure else "")

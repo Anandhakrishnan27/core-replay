@@ -23,7 +23,7 @@ CASES = [
     ("10001", "session_expired", "success", "SUCCESS"),  # recovery: reauthenticate
     ("10001", "denied", "failed", "PERMISSION_DENIED"),
     ("10001", "error", "failed", "APP_ERROR"),
-    ("10001", "maint", "failed", "UNKNOWN_STATE"),  # escalates; no operator → handoff times out
+    ("10001", "maint", "failed", "UNKNOWN_STATE"),  # escalates; no operator → ends at once
 ]
 
 
@@ -38,7 +38,6 @@ def run(approved_artifact, tenant, test_policy, browser, tmp_path):
             fault=fault,
             browser=kw.pop("browser", browser),
             evidence_root=tmp_path,
-            handoff_timeout_s=0.1,
             **kw,
         )
 
@@ -96,11 +95,14 @@ async def test_unknown_state_snapshots_and_escalates(run):
     result = await run("10001", "maint")
     assert result.failure is not None
     assert result.failure.step_id == "submit_search"
-    assert [h.resolution for h in result.handoffs] == ["timed_out"]
+    assert [h.resolution for h in result.handoffs] == ["aborted"]  # no operator available
+    assert result.handoffs[0].operator_id is None and result.handoffs[0].human_actions == []
     assert any(p.endswith(".png") for p in result.failure.evidence)
     assert any(".dom." in p for p in result.failure.evidence)
     names = [e["event"] for e in events(result)]
     assert names.index("escalation_requested") < names.index("handoff_resolved")
+    resolved = next(e for e in events(result) if e["event"] == "handoff_resolved")
+    assert resolved["details"]["detail"] == "no operator available"
 
 
 async def test_hard_failure_does_not_escalate(run):
