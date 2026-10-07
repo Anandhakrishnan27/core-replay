@@ -352,3 +352,21 @@ def test_no_anthropic_import_outside_discovery():
         if "discovery" not in p.parts and re.search(r"^\s*(import|from) anthropic", p.read_text(), re.M)
     ]
     assert offenders == []
+
+
+async def test_missing_credentials_is_a_clear_failure(run):
+    def no_key(page: str) -> Response:
+        raise TypeError("Could not resolve authentication method. Expected one of api_key, auth_token ...")
+
+    result, _ = await run([no_key])
+    assert result.trace.status == "failed" and "ANTHROPIC_API_KEY" in result.reason
+
+
+async def test_unexpected_error_reports_where_not_what(run):
+    def bug(page: str) -> Response:
+        raise RuntimeError("secret page text 10001")
+
+    result, _ = await run([bug])
+    assert result.trace.status == "failed"
+    assert "RuntimeError at test_discovery_agent.py:" in result.reason and "10001" not in result.reason
+    assert '"internal_error"' in log_text(result) and "secret page text" not in log_text(result)

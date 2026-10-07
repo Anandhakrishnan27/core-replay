@@ -27,6 +27,7 @@ import asyncio
 import os
 import re
 import secrets
+import traceback
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
@@ -71,6 +72,7 @@ FALLBACK_MODELS = {
 }
 SCRATCH_RUNS = EVIDENCE_DIR / "_scratch"
 FAULT_COOKIE = "mb_fault"  # mock bank demo harness only (same as replay)
+NO_CREDENTIALS = "no Anthropic credentials: set ANTHROPIC_API_KEY (e.g. in .env) or run `ant auth login`"
 
 _OUTPUT_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _SUBMIT_KEYS = {"enter", "numpadenter", "return"}
@@ -225,7 +227,11 @@ async def discover(
             except _Stop as stop:
                 return finish(stop.status, stop.reason)
     except Exception as e:  # browser failed to start / context failed to close / internal error
-        return finish("failed", f"internal error: {type(e).__name__}")
+        # Where it happened, never the message: exception text can quote page content or typed values.
+        frame = traceback.extract_tb(e.__traceback__)[-1] if e.__traceback__ else None
+        where = f"{Path(frame.filename).name}:{frame.lineno} in {frame.name}" if frame else "unknown"
+        logger.event("internal_error", error=type(e).__name__, where=where)
+        return finish("failed", f"internal error: {type(e).__name__} at {where}")
 
 
 # --------------------------------------------------------------------------- #
@@ -345,6 +351,11 @@ class _Agent:
             response = await self.api.create(**kwargs)
         except anthropic.APIError as e:  # the SDK already retried 408/409/429/5xx/connection errors
             raise _Stop("failed", f"model API error: {type(e).__name__}") from None
+        except TypeError as e:
+            # The SDK raises TypeError (not APIError) when it finds no credentials at request time.
+            if "authentication" in str(e):
+                raise _Stop("failed", NO_CREDENTIALS) from None
+            raise
         usage = getattr(response, "usage", None)
         self.logger.event(
             "llm_turn",
