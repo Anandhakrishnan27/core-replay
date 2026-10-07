@@ -26,6 +26,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from urllib.parse import parse_qs
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -33,14 +34,13 @@ from fastapi.templating import Jinja2Templates
 from mockbank.data import find_member
 from mockbank.faults import Fault, active_fault, apply_fault_param, mark_once, once_consumed
 
+load_dotenv()  # MOCKBANK_USER / MOCKBANK_PASSWORD from .env when not already in the environment
+
 app = FastAPI(title="MockBank Core", docs_url=None, redoc_url=None, openapi_url=None)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 SESSION_COOKIE = "mb_session"
 SLOW_REFRESH_S = 2
-# Synthetic demo sign-on, used when MOCKBANK_USER / MOCKBANK_PASSWORD are unset (env / .env win).
-# Must match the defaults in cua/cli.py.
-DEMO_USER, DEMO_PASSWORD = "teller01", "mockbank-demo"
 
 # In-memory only: a restart signs everyone out, which is fine for a mock.
 _sessions: set[str] = set()
@@ -98,8 +98,9 @@ async def login_page(request: Request) -> HTMLResponse:
 @app.post("/login", response_model=None)
 async def login(request: Request) -> Response:
     form = await _form(request)
-    user = os.getenv("MOCKBANK_USER", DEMO_USER)
-    password = os.getenv("MOCKBANK_PASSWORD", DEMO_PASSWORD)
+    # Sign-on from env / .env only. Unset → every login is refused (fail closed); no built-in default.
+    user = os.getenv("MOCKBANK_USER")
+    password = os.getenv("MOCKBANK_PASSWORD")
     ok = (
         bool(user and password)
         and secrets.compare_digest(form.get("userid", "").encode(), (user or "").encode())

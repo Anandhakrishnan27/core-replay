@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,11 +19,7 @@ if TYPE_CHECKING:
     from cua.handoff.operator import OperatorServer
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
-load_dotenv()
-# Demo-only defaults for the synthetic mock bank (must match mockbank/app.py). Env and .env win.
-# Real deployments set credentials in the environment; the SessionProvider still reads only env.
-os.environ.setdefault("MOCKBANK_USER", "teller01")
-os.environ.setdefault("MOCKBANK_PASSWORD", "mockbank-demo")
+load_dotenv()  # credentials (MOCKBANK_USER / MOCKBANK_PASSWORD) come only from env or .env: no defaults
 
 
 OperatorFlag = Annotated[

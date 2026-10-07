@@ -130,3 +130,19 @@ def test_discover_attaches_the_operator_by_default(monkeypatch, args, attached):
     assert (seen["operator"] is not None) is attached
     if attached:
         assert seen["page"] == {"with_token": 200, "without": 403}
+
+
+def test_cli_sets_no_default_credentials(monkeypatch, tmp_path):
+    """Credentials come only from env / .env: importing the CLI must not invent any."""
+    import importlib
+
+    import cua.cli
+
+    monkeypatch.chdir(tmp_path)  # no .env here for load_dotenv to find
+    monkeypatch.delenv("MOCKBANK_USER", raising=False)
+    monkeypatch.delenv("MOCKBANK_PASSWORD", raising=False)
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **kw: False)
+    importlib.reload(cua.cli)
+    import os
+
+    assert "MOCKBANK_USER" not in os.environ and "MOCKBANK_PASSWORD" not in os.environ

@@ -25,13 +25,13 @@ Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/).
 
 ```bash
 make setup                 # uv sync + playwright install chromium
-cp .env.example .env       # then fill in ANTHROPIC_API_KEY and CUA_MODEL
+# then create .env (git-ignored) with the variables below; both the CLI and the mock bank read it
 ```
 
 | Variable | Needed for | Notes |
 |---|---|---|
 | `ANTHROPIC_API_KEY`, `CUA_MODEL` | discovery only | Replay never calls the LLM |
-| `MOCKBANK_USER`, `MOCKBANK_PASSWORD` | optional | Synthetic; default `teller01` / `mockbank-demo` for the local mock bank. Read only by the session provider |
+| `MOCKBANK_USER`, `MOCKBANK_PASSWORD` | every run | Required, no default: choose any values. The mock bank accepts exactly these (it refuses every login if they are unset) and the session provider signs in with them. Never logged or sent to the LLM |
 | `CUA_REDACTION_SALT` | all runs | Salt for hashing PII in logs |
 | `CUA_HEADLESS` | handoff | Must be `false` for a human to take over |
 
