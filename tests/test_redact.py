@@ -1,4 +1,13 @@
-from cua.safety.redact import hash_value, redact, redact_mapping, redact_typed
+import pytest
+
+from cua.safety.redact import (
+    data_shape,
+    hash_value,
+    page_value,
+    redact,
+    redact_mapping,
+    redact_typed,
+)
 from cua.schema.artifact import Sensitivity
 
 
@@ -39,3 +48,26 @@ def test_redact_digit_runs():
         assert raw not in out
     assert "v2.3" in out and "180 px" in out  # fewer than 4 digits: kept
     assert redact_digit_runs("10001") == redact_digit_runs("10001")  # stable hash
+
+
+@pytest.mark.parametrize(
+    ("text", "shape"),
+    [
+        ("$1,203.55", "currency"),
+        ("($5.00)", "currency"),
+        ("1203.55", "decimal"),
+        ("10002", "integer"),
+        ("2026-10-01", "date"),
+        ("Branch 12345 closed", "text"),
+        ("Share Savings", None),
+        ("MockBank Core v2.3", None),
+    ],
+)
+def test_data_shape(text, shape):
+    assert data_shape(text) == shape
+
+
+def test_page_value_never_returns_data():
+    assert page_value("$1,203.55") == "«shape:currency»"
+    assert page_value("Jane Doe", masked=True) == "«masked»"
+    assert page_value("Member Summary") == "Member Summary"

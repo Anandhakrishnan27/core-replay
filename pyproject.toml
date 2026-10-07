@@ -9,7 +9,7 @@ dependencies = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "jinja2>=3.1",
-  "playwright>=1.49",
+  "playwright==1.63.0",  # pinned: observe() relies on aria_snapshot(mode="ai") and aria-ref locators
   "pydantic>=2.7",
   "python-dotenv>=1.0",
   "pyyaml>=6.0",
@@ -50,6 +50,7 @@ ignore = ["UP042"]
 [tool.ruff.lint.per-file-ignores]
 "cua/handoff/recorder.py" = ["E501"]  # embedded JavaScript
 "cua/surface/engines.py" = ["E501"]  # embedded JavaScript
+"cua/surface/aria.py" = ["E501"]  # embedded JavaScript
 
 [tool.mypy]
 python_version = "3.11"

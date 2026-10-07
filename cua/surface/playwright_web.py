@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from urllib.parse import urlsplit
 
 from playwright.async_api import ElementHandle, Frame, Page
 from playwright.async_api import Error as PlaywrightError
@@ -22,7 +23,7 @@ from cua.config import Policy
 from cua.evidence.logger import RunLogger
 from cua.handoff.controller import SessionControl
 from cua.safety.policy import Mode, NeedsHuman, PolicyGate, PolicyViolation
-from cua.safety.redact import redact_digit_runs
+from cua.safety.redact import data_shape, page_value, redact_digit_runs
 from cua.schema.artifact import (
     Action,
     Click,
@@ -41,6 +42,16 @@ from cua.schema.artifact import (
     TargetVisible,
     TextPresent,
     UrlMatches,
+)
+from cua.schema.trace import ElementSnapshot, PageState, TableContext
+from cua.surface.aria import (
+    ELEMENT_JS,
+    FRAME_NAME_JS,
+    INPUT_ROLES,
+    PAGE_TEXT_JS,
+    AriaLine,
+    parse_line,
+    redact_snapshot,
 )
 from cua.surface.base import ActionFailed, Observation, Resolved, TargetAmbiguous, TargetNotFound
 from cua.surface.locators import element_at, frames_for, to_playwright
@@ -73,6 +84,14 @@ _SERIALIZE_JS = """({paths, selectors}) => {
   return clone.outerHTML;
 }"""
 _RAW_BLOCK_RE = re.compile(r"(<(style|script)\b.*?</\2>)", re.S | re.I)
+# Discovery has no `sensitive` targets yet, so its screenshots mask every leaf element showing a digit
+# and every text-entry control. Over-masking is the safe direction.
+_DIGIT_RE = re.compile(r"\d")
+_LEAF = "body *:not(:has(*))"
+_TEXT_ENTRY = (
+    "input:not([type]), input[type=text], input[type=search], input[type=number], input[type=tel], "
+    "input[type=email], input[type=password], textarea"
+)
 
 
 def _norm(text: str) -> str:
@@ -124,7 +143,116 @@ class PlaywrightWebSurface:
     # ---- observe ------------------------------------------------------------------------------- #
 
     async def observe(self, with_screenshot: bool = False) -> Observation:
-        raise NotImplementedError("phase-4: aria snapshot + element refs for discovery")
+        """Discovery's view of the page: redacted aria tree with refs, an ElementSnapshot per ref, PageState.
+
+        One ai-mode aria snapshot covers the top document and every frame. Nothing in the result holds a
+        typed value, a masked value or a data value (see cua.surface.aria).
+        """
+        raw = await self.page.aria_snapshot(mode="ai")
+        refs: dict[str, ElementSnapshot] = {}
+        safe_names: dict[str, str] = {}
+        frame_names: dict[str, str] = {}
+        for raw_line in raw.splitlines():
+            line = parse_line(raw_line)
+            if line is None or line.ref is None:
+                continue
+            ref = line.ref
+            if line.role == "iframe":
+                handle = await self._ref_handle(ref)
+                if handle is not None:
+                    frame_names[ref] = str(await handle.evaluate(FRAME_NAME_JS))
+                continue
+            if not line.wants_snapshot:
+                continue
+            snap = await self._element_snapshot(ref, line)
+            if snap is None:
+                continue
+            refs[ref] = snap
+            # A control's trailing text is its typed value: never a display name.
+            shown = line.name if line.role in INPUT_ROLES else (line.name or line.text)
+            if shown:
+                safe_names[ref] = snap.accessible_name or snap.text or page_value(shown)
+        text = redact_snapshot(raw, safe_names, frame_names)
+        png = None
+        if with_screenshot:
+            png = await self.page.screenshot(
+                mask=self._mask_locators(), mask_color=MASK_COLOR, animations="disabled"
+            )
+        return Observation(page=await self._page_state(), aria_snapshot=text, refs=refs, screenshot_png=png)
+
+    async def _ref_handle(self, ref: str) -> ElementHandle | None:
+        """The live element for an aria ref from the latest snapshot. Never waits."""
+        try:
+            handles = await self.page.locator(f"aria-ref={ref}").element_handles()
+        except PlaywrightError:
+            return None
+        return handles[0] if len(handles) == 1 else None
+
+    async def _element_snapshot(self, ref: str, line: AriaLine) -> ElementSnapshot | None:
+        handle = await self._ref_handle(ref)
+        if handle is None:
+            return None
+        try:
+            info = await handle.evaluate(ELEMENT_JS, self.mask_selectors)
+            frame = await handle.owner_frame()
+            box = await handle.bounding_box()
+        except PlaywrightError:
+            return None  # detached mid-observation: the next observation will have it
+        masked = bool(info["masked"])
+
+        def safe(text: str | None, is_masked: bool = masked) -> str | None:
+            return page_value(text, masked=is_masked) if text else None
+
+        nearby: dict[str, str] = {}
+        if info["left"]:
+            nearby["left"] = page_value(info["left"]["text"], masked=info["left"]["masked"])
+        table = None
+        if info["table"]:
+            t = info["table"]
+            nearby["above"] = t["column"]
+            table = TableContext(
+                table_headers=t["headers"],
+                row_text=" | ".join(page_value(c["text"], masked=c["masked"]) for c in t["row"]),
+                column_header=t["column"],
+            )
+        return ElementSnapshot(
+            frame_path=_frame_path(frame),
+            tag=info["tag"],
+            role=line.role,
+            accessible_name=safe(line.name),
+            label=safe(info["label"], False),
+            name_attr=info["name_attr"],
+            id_attr=info["id_attr"],
+            text=safe(info["text"]),
+            nearby_text=nearby,
+            table_context=table,
+            css_path=info["css"],
+            xpath=info["xpath"],
+            bbox=(box["x"], box["y"], box["width"], box["height"]) if box else None,
+        )
+
+    async def _page_state(self) -> PageState:
+        headings: list[str] = []
+        texts: list[str] = []
+        for frame in self.page.frames:
+            try:
+                found = await frame.evaluate(PAGE_TEXT_JS, self.mask_selectors)
+            except PlaywrightError:
+                continue
+            headings.extend(found["headings"])
+            texts.extend(found["texts"])
+
+        def ui_only(items: list[str], limit: int) -> list[str]:
+            # dict.fromkeys: dedupe, keep first-seen order
+            return [t for t in dict.fromkeys(items) if t and len(t) <= limit and data_shape(t) is None]
+
+        parts = urlsplit(self.page.url)
+        return PageState(
+            url=f"{parts.scheme}://{parts.netloc}{parts.path}",
+            title=redact_digit_runs(await self.page.title()),
+            headings=ui_only(headings, 120),
+            visible_texts=ui_only(texts, 80),
+        )
 
     # ---- resolve ------------------------------------------------------------------------------- #
 
@@ -327,6 +455,9 @@ class PlaywrightWebSurface:
                 )
         for frame in self.page.frames:
             masks.extend(frame.locator(sel) for sel in self.mask_selectors)
+            if self.mode == "discovery":
+                masks.append(frame.locator(_LEAF, has_text=_DIGIT_RE))
+                masks.append(frame.locator(_TEXT_ENTRY))
         return masks
 
     async def _dom(self, frame: Frame) -> str:
@@ -364,3 +495,12 @@ class PlaywrightWebSurface:
         rel = [self.logger.rel(p) for p in paths]
         self.logger.event("snapshot", reason=_slug(reason), files=rel)
         return rel
+
+
+def _frame_path(frame: Frame | None) -> list[str]:
+    """Names of the frames from the top document down to `frame` (url path when a frame has no name)."""
+    path: list[str] = []
+    while frame is not None and frame.parent_frame is not None:
+        path.insert(0, frame.name or urlsplit(frame.url).path)
+        frame = frame.parent_frame
+    return path

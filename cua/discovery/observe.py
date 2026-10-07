@@ -1,9 +1,11 @@
-"""Build the LLM observation: a11y snapshot with element refs (+ optional masked screenshot). Phase 4.
+"""Build the LLM observation: a11y snapshot with element refs (+ optional masked screenshot).
 
-Approach: walk frames; use locator.aria_snapshot() per frame for the readable tree, and an injected
-script to assign stable refs (e1..eN) to interactive/text elements, capturing an ElementSnapshot for
-each ref (role, name, label, nearby text, table context, css path). The snapshots are kept so the
-recorder can attach the exact element to every action.
+The work happens in Surface (only Surface touches the browser): PlaywrightWebSurface.observe() takes one
+ai-mode aria snapshot covering every frame (refs like f3e26), captures an ElementSnapshot per useful ref
+(role, name, label, nearby text, table context, css path, frame path) and returns the tree already
+redacted: typed values reduced to their length, tenant-masked text as «masked», data values as their
+shape (e.g. «shape:currency»). The snapshots are kept so the recorder can attach the exact element to
+every action. See cua.surface.aria.
 """
 
 from __future__ import annotations

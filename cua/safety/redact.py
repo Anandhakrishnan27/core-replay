@@ -53,3 +53,39 @@ def redact_digit_runs(text: str, min_digits: int = 4) -> str:
 def redact_mapping(data: dict[str, Any], sensitivity_by_key: dict[str, Sensitivity]) -> dict[str, Any]:
     """Redact known keys; unknown keys default to `internal` (kept)."""
     return {k: redact(v, sensitivity_by_key.get(k, Sensitivity.internal), k) for k, v in data.items()}
+
+
+# ---- page values seen during discovery ------------------------------------------------------------ #
+# Data on screen (balances, ids, dates) is replaced by its SHAPE before it reaches the LLM or the trace.
+# The compiler derives parse types and MatchRule.text_pattern from the shape; the value is never kept.
+
+MASKED = "«masked»"
+_GROUPED = r"\d{1,3}(?:,?\d{3})*"
+_SHAPES: list[tuple[str, re.Pattern[str]]] = [
+    ("date", re.compile(r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}$")),
+    ("currency", re.compile(rf"^\(?-?[$€£]\s?-?{_GROUPED}(?:\.\d{{2}})?\)?$")),
+    ("decimal", re.compile(rf"^-?{_GROUPED}\.\d+$")),
+    ("integer", re.compile(rf"^-?{_GROUPED}$")),
+]
+_LONG_DIGITS_RE = re.compile(r"\d{4,}|\d(?:[,.]?\d){3,}")
+
+
+def shape_token(kind: str) -> str:
+    return f"«shape:{kind}»"
+
+
+def data_shape(text: str) -> str | None:
+    """'currency' | 'decimal' | 'integer' | 'date' for a value-only text; 'text' if it holds a long number."""
+    t = " ".join(text.split())
+    for kind, pattern in _SHAPES:
+        if pattern.match(t):
+            return kind
+    return "text" if _LONG_DIGITS_RE.search(t) else None
+
+
+def page_value(text: str, *, masked: bool = False) -> str:
+    """Log- and LLM-safe form of one element's text: «masked», «shape:kind», or the UI text unchanged."""
+    if masked:
+        return MASKED
+    kind = data_shape(text)
+    return text if kind is None else shape_token(kind)

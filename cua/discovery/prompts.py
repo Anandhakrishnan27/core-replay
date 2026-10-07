@@ -1,5 +1,7 @@
 """System prompt for the discovery agent."""
 
+import re
+
 SYSTEM_PROMPT = """\
 You operate a legacy bank back-office web application to accomplish one goal.
 You see the page as an accessibility snapshot where each element has a ref like e14.
@@ -16,10 +18,17 @@ Rules:
 7. Call done only when the goal is visibly complete and all requested values were extracted.
 """
 
+# Page text must not be able to close (or open) the untrusted wrapper.
+_WRAPPER_TAG_RE = re.compile(r"<(/?)(page\b)", re.I)
+
+
+def escape_untrusted(text: str) -> str:
+    return _WRAPPER_TAG_RE.sub(r"&lt;\1\2", text)
+
 
 def user_turn(goal: str, page_text: str, step: int, max_steps: int) -> str:
     return (
         f"Goal: {goal}\nStep {step}/{max_steps}\n"
-        f'<page untrusted="true">\n{page_text}\n</page>\n'
+        f'<page untrusted="true">\n{escape_untrusted(page_text)}\n</page>\n'
         "Choose the next tool call."
     )
