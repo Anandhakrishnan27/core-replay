@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from cua.schema import CapabilityArtifact, RunResult
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT = ROOT / "capabilities/mockbank/member.lookup_savings_balance/1.0.0.json"
+ARTIFACT = ROOT / "tests/fixtures/lookup_savings_balance.handwritten.json"
 RESULTS = ROOT / "examples/results.json"
 
 

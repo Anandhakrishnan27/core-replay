@@ -78,7 +78,9 @@ evidence/          curated demo runs (see evidence/README.md)
 tests/
 ```
 
-**About `capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`:** this is a **hand-written fixture**, not generated output. It lets replay be built before discovery, and it is the target shape for the compiler. Don't overwrite it. After the first real discovery run, it moves to `tests/fixtures/`, and `capabilities/` then holds only generated artifacts.
+**About `tests/fixtures/lookup_savings_balance.handwritten.json`:** this is a **hand-written fixture**, not generated output (it used to live at `capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`). It lets replay be built before discovery, and it is the target shape for the compiler. Don't overwrite it. `capabilities/` holds only generated artifacts.
+
+**Demo targets:** `make demo-replay | demo-notfound | demo-handoff` replay by capability id, so they fail with `FileNotFoundError` until Phase 4 discovery writes `capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`. That is expected; there is deliberately no `--artifact` CLI flag. To replay an unsaved draft (the Phase 4 compiler self-test), call `cua.replay.executor.execute()` directly with the loaded artifact and `mode="supervised"`: it runs the same pre-flight as a catalog replay.
 
 ## Invariants: never violate these
 

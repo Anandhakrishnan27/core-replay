@@ -22,7 +22,7 @@ from cua.surface.browser import BrowserSession, open_session, start_browser
 from cua.surface.playwright_web import PlaywrightWebSurface
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT_PATH = ROOT / "capabilities/mockbank/member.lookup_savings_balance/1.0.0.json"
+ARTIFACT_PATH = ROOT / "tests/fixtures/lookup_savings_balance.handwritten.json"
 
 
 @pytest.fixture
