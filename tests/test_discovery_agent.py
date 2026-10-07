@@ -20,6 +20,7 @@ import pytest
 
 from cua.config import Credentials
 from cua.discovery.agent import FALLBACK_BETA, DiscoveryResult, action_risk, discover
+from cua.discovery.recorder import load_trace
 from cua.discovery.tools import TOOLS
 from cua.safety.policy import PolicyGate
 from cua.schema.artifact import RiskClass
@@ -204,6 +205,14 @@ async def test_happy_path_records_trace_and_keeps_values_out_of_evidence(run):
     assert "10001" not in log and "2,450.17" not in log and "Test Member A" not in log
     assert list((result.evidence_dir / "steps").glob("*_click.png"))
 
+    # trace.json in evidence: same actions, nothing raw; the fill still matches its parameter's hash.
+    saved = load_trace(result.trace_path)
+    assert [a.tool for a in saved.actions] == ["click", "fill", "click", "extract"]
+    assert saved.status == "completed"
+    assert saved.actions[1].value == saved.goal_values["member_id"] != "10001"
+    text = result.trace_path.read_text()
+    assert "10001" not in text and "2,450.17" not in text and "Test Member A" not in text
+
 
 async def test_request_shape_matches_the_documented_api(run):
     _, stub = await run(HAPPY_PATH[:1])
@@ -286,6 +295,7 @@ async def test_dismissed_notice_is_recorded_as_dismiss(run):
 async def test_ask_human_without_an_operator_escalates(run):
     result, _ = await run([call("ask_human", reason="unexpected screen for member 10001")])
     assert result.trace.status == "escalated"
+    assert load_trace(result.trace_path).status == "escalated"
     log = log_text(result)
     assert '"handoff_requested"' in log and "10001" not in log
     assert list((result.evidence_dir / "steps").glob("*_handoff.png"))

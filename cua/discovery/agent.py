@@ -8,6 +8,7 @@ Loop (bounded by limits.discovery_max_steps / discovery_timeout_s):
     extract    → surface.read() → raw value kept in memory only; the model is told "value withheld"
     otherwise  → resolve ref → verify locator candidates → surface.act() (policy-gated; NeedsHuman →
                  handoff) → settle → observe → recorder.add(TraceAction)
+The recorder rewrites a REDACTED trace.json in the evidence folder after every change.
     stuck.record(...) → reason → handoff
 A handoff that is not resolved ends the run as "escalated". A refusal, or an API error after the SDK's
 bounded retries, ends it as "failed". Until Phase 5 attaches an operator, every handoff times out at once.
@@ -28,7 +29,7 @@ import re
 import secrets
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -41,7 +42,7 @@ from playwright.async_api import Error as PlaywrightError
 from cua.compiler.locators import candidates
 from cua.config import EVIDENCE_DIR, Policy, Tenant, load_policy, load_tenant
 from cua.discovery.prompts import SYSTEM_PROMPT, user_turn
-from cua.discovery.recorder import TraceRecorder
+from cua.discovery.recorder import TRACE_FILE, TraceRecorder
 from cua.discovery.stuck import StuckDetector
 from cua.discovery.tools import TOOLS
 from cua.evidence.logger import RunLogger
@@ -87,11 +88,19 @@ class MessagesAPI(Protocol):
 
 @dataclass
 class DiscoveryResult:
+    # IN MEMORY: raw typed values and extracted outputs (the compiler and its self-test need them).
+    # The evidence copy at `trace_path` is redacted.
     trace: DiscoveryTrace
     reason: str  # why the run ended, log-safe
     evidence_dir: Path
-    # Raw extracted values, IN MEMORY ONLY (the compiler's self-test compares against them).
-    outputs: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def outputs(self) -> dict[str, str]:
+        return self.trace.outputs
+
+    @property
+    def trace_path(self) -> Path:
+        return self.evidence_dir / TRACE_FILE
 
 
 class _Stop(Exception):
@@ -174,8 +183,7 @@ async def discover(
         model=model,
         started_at=datetime.now(UTC),
     )
-    recorder = TraceRecorder(trace)
-    outputs: dict[str, str] = {}
+    recorder = TraceRecorder(trace, logger.dir / TRACE_FILE)
     # The goal names the input values (e.g. a member number): never logged as-is.
     logger.event(
         "run_started",
@@ -186,9 +194,9 @@ async def discover(
     )
 
     def finish(status: Status, reason: str) -> DiscoveryResult:
-        trace.status = status
+        recorder.finish(status)
         logger.event("run_finished", status=status, reason=reason, actions=len(trace.actions))
-        return DiscoveryResult(trace=trace, reason=reason, evidence_dir=logger.dir, outputs=outputs)
+        return DiscoveryResult(trace=trace, reason=reason, evidence_dir=logger.dir)
 
     gate = PolicyGate(policy)
     try:
@@ -217,7 +225,7 @@ async def discover(
                 control=control,
             )
             agent = _Agent(
-                goal, params, policy, gate, logger, surface, control, recorder, outputs,
+                goal, params, policy, gate, logger, surface, control, recorder,
                 messages_api=messages_api, model=model, handoff_timeout_s=handoff_timeout_s,
             )  # fmt: skip
             try:
@@ -262,7 +270,6 @@ class _Agent:
         surface: PlaywrightWebSurface,
         control: SessionControl,
         recorder: TraceRecorder,
-        outputs: dict[str, str],
         *,
         messages_api: MessagesAPI,
         model: str,
@@ -276,7 +283,6 @@ class _Agent:
         self.surface = surface
         self.control = control
         self.recorder = recorder
-        self.outputs = outputs
         self.api = messages_api
         self.model = model
         self.handoff_timeout_s = handoff_timeout_s
@@ -469,10 +475,10 @@ class _Agent:
             value = await self.surface.read(resolved)  # policy-gated; never logged
         except (TargetNotFound, ActionFailed, PolicyViolation) as e:
             return _Outcome(message=f"failed: {e}", ok=False)
-        self.outputs[name] = value
+        self.recorder.output(name, value)
         self.recorder.add(
             TraceAction(
-                seq=len(self.recorder.trace.actions) + 1,
+                seq=self.recorder.next_seq,
                 at=datetime.now(UTC),
                 actor="llm",
                 tool="extract",
@@ -506,7 +512,7 @@ class _Agent:
     ) -> None:
         self.recorder.add(
             TraceAction(
-                seq=len(self.recorder.trace.actions) + 1,
+                seq=self.recorder.next_seq,
                 at=datetime.now(UTC),
                 actor="llm",
                 tool=tool,  # type: ignore[arg-type]  # one of _ACT_TOOLS, all valid TraceAction tools
