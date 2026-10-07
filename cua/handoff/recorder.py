@@ -12,7 +12,9 @@ and is fetched by id from the reporting frame only when a caller needs it (disco
     keydown Enter in a field                          → press
     navigation of any frame (Python side)             → frame name + path only
 Password fields are never reported at all. Events arrive while automation acts too; the recorder keeps
-them only while SessionControl.state is HUMAN.
+them only while SessionControl.state is HUMAN or RESUMING (automation never acts while RESUMING, so a
+late-delivered event from just before hand-back is still the human's). `drain()` after hand-back
+waits for events the page already sent.
 
 On the Python side every hint goes through the same redaction as discovery observations: tenant
 `mask_selectors` text → «masked», data values → «shape:…», other long numbers hashed.
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -33,6 +36,7 @@ from cua.evidence.logger import RunLogger
 from cua.handoff.controller import ControlState, SessionControl
 from cua.safety.redact import page_value, redact_digit_runs, redact_typed
 from cua.schema.result import HumanAction
+from cua.surface.wait import poll_until
 
 BINDING = "__cuaRecord"
 
@@ -89,7 +93,22 @@ _LISTENER_TEMPLATE = r"""
 })();
 """
 
-OnAction = Callable[[HumanAction, ElementHandle | None], Awaitable[None]]
+
+@dataclass
+class HumanElement:
+    """What the human acted on, for discovery's trace. IN MEMORY ONLY: never logged or persisted.
+
+    `name` is the raw accessible name (None for text fields and selects, whose caption is not their
+    name); `option` the chosen option of a select. A typed value is NOT here: it never left the page.
+    """
+
+    handle: ElementHandle
+    role: str
+    name: str | None
+    option: str | None = None
+
+
+OnAction = Callable[[HumanAction, HumanElement | None], Awaitable[None]]
 
 
 def listener_script(mask_selectors: Sequence[str]) -> str:
@@ -113,10 +132,28 @@ class HumanRecorder:
         self.on_action = on_action  # discovery: turn the element into a trace step (stage 4)
         self.actions: list[HumanAction] = []  # everything recorded this run, redacted
         self._pages: set[Page] = set()
+        self._inflight = 0  # events being handled right now
 
     @property
     def recording(self) -> bool:
-        return self.control.state is ControlState.HUMAN
+        return self.control.state in (ControlState.HUMAN, ControlState.RESUMING)
+
+    async def drain(self, timeout_ms: int = 2_000) -> None:
+        """After hand-back: let events the page sent while the human held control finish (bounded).
+
+        A round trip to every frame delivers what was sent before it; then wait for handlers in flight.
+        """
+        for page in self.context.pages:
+            for frame in page.frames:
+                try:
+                    await frame.evaluate("0")
+                except PlaywrightError:
+                    continue
+
+        async def idle() -> bool:
+            return self._inflight == 0
+
+        await poll_until(idle, timeout_ms, 20)
 
     async def install(self) -> None:
         """Before any page loads (i.e. before login): every new document gets the listener."""
@@ -152,6 +189,13 @@ class HumanRecorder:
         self._add(HumanAction(at=_now(), kind="navigate", target_hint=f"{where} → {_path(frame.url)}"))
 
     async def _on_event(self, source: dict[str, Any], info: dict[str, Any]) -> None:
+        self._inflight += 1
+        try:
+            await self._handle(source, info)
+        finally:
+            self._inflight -= 1
+
+    async def _handle(self, source: dict[str, Any], info: dict[str, Any]) -> None:
         frame: Frame | None = source.get("frame")
         element_id = str(info.get("id", ""))
         if not self.recording:
@@ -172,9 +216,20 @@ class HumanRecorder:
             value = str(info.get("key") or "")
         action = HumanAction(at=_now(), kind=kind, target_hint=hint, value=value)  # type: ignore[arg-type]
         self._add(action)
-        element = await _take(frame, element_id) if self.on_action is not None else None
+        handle = await _take(frame, element_id) if self.on_action is not None else None
         await _forget(frame, element_id)
         if self.on_action is not None:
+            role = str(info.get("role") or "")
+            element = (
+                HumanElement(
+                    handle=handle,
+                    role=role,
+                    name=str(info.get("name") or "") or None if shows_own_text else None,
+                    option=str(info.get("option") or "") or None if kind == "select" else None,
+                )
+                if handle is not None
+                else None
+            )
             await self.on_action(action, element)
 
     def _add(self, action: HumanAction) -> None:

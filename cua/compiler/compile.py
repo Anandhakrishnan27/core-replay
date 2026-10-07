@@ -74,6 +74,7 @@ from cua.schema.artifact import (
 from cua.schema.trace import DiscoveryTrace, TraceAction
 
 COMPILER_VERSION = "0.1.0"
+SUBMIT_KEYS = {"enter", "numpadenter", "return"}
 REVIEW_NOTE = (
     "Compiled automatically. Before approving, check: locators and their order, checkpoint texts, "
     "condition texts and outcome codes, input pattern, and output sensitivity."
@@ -117,7 +118,11 @@ def compile_trace(
         return name
 
     def target_for(a: TraceAction, *, sensitive: bool = False, text_pattern: str | None = None) -> str:
-        assert a.element is not None
+        if a.element is None:
+            raise CompileError(
+                f"action {a.seq} ({a.actor} {a.tool}): the element was not captured on the live page "
+                "(it left the page first); re-run discovery"
+            )
         key = element_key(a.element)
         if key in target_by_element:
             return target_by_element[key]
@@ -154,6 +159,12 @@ def compile_trace(
             act = SelectOption(target=tid, option=a.value)
             sid = f"select_{tid}"
         elif a.tool == "press":
+            if (a.value or "").lower() in SUBMIT_KEYS:
+                # Enter submits whatever form has focus: the risk of what it commits is unknown.
+                raise CompileError(
+                    f"action {a.seq} ({a.actor}): Enter submitted a form; re-run discovery and click "
+                    "the form's button instead, so the step's risk can be classified"
+                )
             tid = target_for(a) if a.element is not None else None
             act = Press(key=a.value or "", target=tid)
             sid = f"press_{slug(a.value or 'key')}"

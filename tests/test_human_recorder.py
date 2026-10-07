@@ -25,7 +25,7 @@ async def rec(session, tenant, make_surface, artifact, mockbank_url, run_logger)
     seen: list[tuple[str, str | None]] = []
 
     async def on_action(action, element):
-        seen.append((action.kind, await element.evaluate("e => e.tagName") if element else None))
+        seen.append((action.kind, await element.handle.evaluate("e => e.tagName") if element else None))
 
     recorder = HumanRecorder(
         session.context, control, run_logger, mask_selectors=tenant.mask_selectors, on_action=on_action

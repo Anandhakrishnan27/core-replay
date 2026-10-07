@@ -76,6 +76,20 @@ class Surface(Protocol):
         """Bounded wait until the page stops loading/changing after an action."""
         ...
 
+    # Discovery handoff: describe what a human acted on (the element comes from the recorder).
+
+    async def describe(self, handle: Any, role: str | None, name: str | None) -> ElementSnapshot | None:
+        """Redacted ElementSnapshot of a live element; None if it is gone."""
+        ...
+
+    async def page_state(self) -> PageState:
+        """The current page, redacted (UI text only)."""
+        ...
+
+    async def typed_value_index(self, handle: Any, values: Sequence[str]) -> int | None:
+        """Index of the value a field holds among `values`, compared inside the app; None if none."""
+        ...
+
 
 class TargetNotFound(Exception): ...
 

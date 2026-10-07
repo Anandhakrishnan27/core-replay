@@ -1,7 +1,8 @@
 """Compiler pass: risk. Per-step RiskClass, then policy.max_risk and requires_confirmation.
 
     fill / select              → reversible (draft state the app has not committed)
-    click / press on a control whose name matches policy.risk.irreversible_button_names → irreversible
+    click / press on a control whose name, text or label matches policy.risk.irreversible_button_names
+                               → irreversible (LLM and human steps alike)
     everything else            → read
 The artifact validator rejects an under-declared policy, and pre-flight refuses an irreversible
 capability without the caller's confirmation.
@@ -19,7 +20,7 @@ def step_risk(action: TraceAction, gate: PolicyGate) -> RiskClass:
         return RiskClass.reversible
     if action.tool in ("click", "press") and action.element is not None:
         el = action.element
-        if gate.is_irreversible_name(el.accessible_name or el.text):
+        if any(gate.is_irreversible_name(t) for t in (el.accessible_name, el.text, el.label) if t):
             return RiskClass.irreversible
     return RiskClass.read
 

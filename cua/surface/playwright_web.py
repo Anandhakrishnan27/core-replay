@@ -194,6 +194,15 @@ class PlaywrightWebSurface:
         handle = await self._ref_handle(ref)
         if handle is None:
             return None
+        return await self.describe(handle, line.role, line.name)
+
+    async def describe(
+        self, handle: ElementHandle, role: str | None, name: str | None
+    ) -> ElementSnapshot | None:
+        """ElementSnapshot of a live element, redacted like observe(). None if it is already detached.
+
+        `name` is the raw accessible name (in memory only): masked or data-shaped names become tokens here.
+        """
         try:
             info = await handle.evaluate(ELEMENT_JS, self.mask_selectors)
             frame = await handle.owner_frame()
@@ -220,8 +229,8 @@ class PlaywrightWebSurface:
         return ElementSnapshot(
             frame_path=_frame_path(frame),
             tag=info["tag"],
-            role=line.role,
-            accessible_name=safe(line.name),
+            role=role,
+            accessible_name=safe(name),
             label=safe(info["label"], False),
             name_attr=info["name_attr"],
             id_attr=info["id_attr"],
@@ -338,6 +347,21 @@ class PlaywrightWebSurface:
                         ok = False  # different frame or detached: not the same element
             results.append(ok)
         return results
+
+    async def page_state(self) -> PageState:
+        """The current PageState (url without query, title, UI-only headings and texts)."""
+        return await self._page_state()
+
+    async def typed_value_index(self, handle: ElementHandle, values: Sequence[str]) -> int | None:
+        """Which of `values` the field holds, compared INSIDE the page: the typed value never leaves it.
+
+        Returns the index into `values`, or None (no match, or the element is gone).
+        """
+        try:
+            index = await handle.evaluate("(e, vals) => vals.indexOf(e.value)", list(values))
+        except PlaywrightError:
+            return None
+        return int(index) if isinstance(index, int) and index >= 0 else None
 
     async def settle(self, timeout_ms: int) -> bool:
         """Wait until every frame has finished loading and the frame tree stopped changing (two polls)."""

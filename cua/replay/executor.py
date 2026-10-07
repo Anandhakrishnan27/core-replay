@@ -797,6 +797,7 @@ class _Run:
             except HandoffAborted as e:
                 timed_out = "timed out" in str(e)
                 end("timed_out" if timed_out else "aborted", str(e))
+            await self.recorder.drain()  # events sent just before hand-back
             self.resyncs += 1
             index = await self._resync(k)
             if index is not None:
