@@ -1,0 +1,512 @@
+{
+  "run_id": "20261006T120000Z_fixt",
+  "goal": "look up member 10001 and read the savings balance",
+  "goal_values": {
+    "member_id": "10001"
+  },
+  "tenant_id": "cu_alpha",
+  "model": "claude-opus-5-5",
+  "started_at": "2026-10-06T12:00:00Z",
+  "actions": [
+    {
+      "seq": 1,
+      "at": "2026-10-06T12:00:01Z",
+      "actor": "llm",
+      "tool": "click",
+      "element": {
+        "frame_path": [
+          "nav"
+        ],
+        "tag": "a",
+        "role": "link",
+        "accessible_name": "Member Lookup",
+        "label": null,
+        "name_attr": null,
+        "id_attr": null,
+        "text": "Member Lookup",
+        "nearby_text": {},
+        "table_context": null,
+        "css_path": "a[href*='mbrlookup']",
+        "xpath": "/html/body[1]/table[1]/tbody[1]/tr[3]/td[1]/a[1]",
+        "bbox": [
+          10.0,
+          58.0,
+          128.421875,
+          19.0
+        ],
+        "verified_locators": [
+          {
+            "strategy": "role",
+            "role": "link",
+            "name": "Member Lookup",
+            "exact": true
+          },
+          {
+            "strategy": "text",
+            "text": "Member Lookup",
+            "exact": true
+          },
+          {
+            "strategy": "css",
+            "selector": "a[href*='mbrlookup']"
+          }
+        ]
+      },
+      "value": null,
+      "secret_name": null,
+      "output_name": null,
+      "page_before": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "MockBank Core v2.3"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Welcome. Select a function from the menu."
+        ]
+      },
+      "page_after": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "System Notice"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "OK"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "reasoning": "next step"
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-06T12:00:02Z",
+      "actor": "llm",
+      "tool": "dismiss",
+      "element": {
+        "frame_path": [
+          "main"
+        ],
+        "tag": "input",
+        "role": "button",
+        "accessible_name": "OK",
+        "label": null,
+        "name_attr": null,
+        "id_attr": null,
+        "text": null,
+        "nearby_text": {},
+        "table_context": null,
+        "css_path": "input[type='submit']",
+        "xpath": "/html/body[1]/div[1]/table[1]/tbody[1]/tr[3]/td[1]/form[1]/input[1]",
+        "bbox": [
+          583.734375,
+          88.0,
+          35.265625,
+          21.0
+        ],
+        "verified_locators": [
+          {
+            "strategy": "role",
+            "role": "button",
+            "name": "OK",
+            "exact": true
+          },
+          {
+            "strategy": "css",
+            "selector": "input[type='submit']"
+          }
+        ]
+      },
+      "value": null,
+      "secret_name": null,
+      "output_name": null,
+      "page_before": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "System Notice"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "OK"
+        ]
+      },
+      "page_after": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Lookup"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Search"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "reasoning": "next step"
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-06T12:00:03Z",
+      "actor": "llm",
+      "tool": "fill",
+      "element": {
+        "frame_path": [
+          "main"
+        ],
+        "tag": "input",
+        "role": "textbox",
+        "accessible_name": null,
+        "label": null,
+        "name_attr": "mbrno",
+        "id_attr": null,
+        "text": null,
+        "nearby_text": {
+          "left": "Member Number"
+        },
+        "table_context": null,
+        "css_path": "form[name='lookup'] input[name='mbrno']",
+        "xpath": "/html/body[1]/form[1]/table[1]/tbody[1]/tr[1]/td[2]/input[1]",
+        "bbox": [
+          359.59375,
+          53.0,
+          97.0,
+          21.0
+        ],
+        "verified_locators": [
+          {
+            "strategy": "near_text",
+            "anchor_text": "Member Number",
+            "relation": "following_input",
+            "role": "textbox"
+          },
+          {
+            "strategy": "css",
+            "selector": "form[name='lookup'] input[name='mbrno']"
+          }
+        ]
+      },
+      "value": "10001",
+      "secret_name": null,
+      "output_name": null,
+      "page_before": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Lookup"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Search"
+        ]
+      },
+      "page_after": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Lookup"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Search"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "reasoning": "next step"
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-06T12:00:04Z",
+      "actor": "llm",
+      "tool": "click",
+      "element": {
+        "frame_path": [
+          "main"
+        ],
+        "tag": "input",
+        "role": "button",
+        "accessible_name": "Search",
+        "label": null,
+        "name_attr": null,
+        "id_attr": null,
+        "text": null,
+        "nearby_text": {},
+        "table_context": null,
+        "css_path": "form[name='lookup'] input[type='submit']",
+        "xpath": "/html/body[1]/form[1]/table[1]/tbody[1]/tr[2]/td[2]/input[1]",
+        "bbox": [
+          359.59375,
+          82.0,
+          58.25,
+          21.0
+        ],
+        "verified_locators": [
+          {
+            "strategy": "role",
+            "role": "button",
+            "name": "Search",
+            "exact": true
+          },
+          {
+            "strategy": "css",
+            "selector": "form[name='lookup'] input[type='submit']"
+          }
+        ]
+      },
+      "value": null,
+      "secret_name": null,
+      "output_name": null,
+      "page_before": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Lookup"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Search"
+        ]
+      },
+      "page_after": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Summary",
+          "Accounts"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Name",
+          "Account Type",
+          "Balance",
+          "Status",
+          "New Search"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "reasoning": "next step"
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-06T12:00:05Z",
+      "actor": "llm",
+      "tool": "extract",
+      "element": {
+        "frame_path": [
+          "main"
+        ],
+        "tag": "td",
+        "role": "cell",
+        "accessible_name": "\u00abshape:currency\u00bb",
+        "label": null,
+        "name_attr": null,
+        "id_attr": null,
+        "text": "\u00abshape:currency\u00bb",
+        "nearby_text": {
+          "left": "Share Savings",
+          "above": "Balance"
+        },
+        "table_context": {
+          "table_headers": [
+            "Account Type",
+            "Balance",
+            "Status"
+          ],
+          "row_text": "Share Savings | \u00abshape:currency\u00bb | Active",
+          "column_header": "Balance"
+        },
+        "css_path": "body:nth-of-type(1) > table:nth-of-type(3) > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2)",
+        "xpath": "/html/body[1]/table[3]/tbody[1]/tr[2]/td[2]",
+        "bbox": [
+          374.8125,
+          160.0,
+          90.84375,
+          27.0
+        ],
+        "verified_locators": [
+          {
+            "strategy": "table_cell",
+            "table_has_header": "Account Type",
+            "row_contains": "Share Savings",
+            "column_header": "Balance"
+          },
+          {
+            "strategy": "css",
+            "selector": "body:nth-of-type(1) > table:nth-of-type(3) > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2)"
+          }
+        ]
+      },
+      "value": null,
+      "secret_name": null,
+      "output_name": "savings_balance",
+      "page_before": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Summary",
+          "Accounts"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Name",
+          "Account Type",
+          "Balance",
+          "Status",
+          "New Search"
+        ]
+      },
+      "page_after": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Summary",
+          "Accounts"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Name",
+          "Account Type",
+          "Balance",
+          "Status",
+          "New Search"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "reasoning": "next step"
+    },
+    {
+      "seq": 6,
+      "at": "2026-10-06T12:00:06Z",
+      "actor": "llm",
+      "tool": "extract",
+      "element": {
+        "frame_path": [
+          "main"
+        ],
+        "tag": "td",
+        "role": "cell",
+        "accessible_name": "Active",
+        "label": null,
+        "name_attr": null,
+        "id_attr": null,
+        "text": "Active",
+        "nearby_text": {
+          "left": "\u00abshape:currency\u00bb",
+          "above": "Status"
+        },
+        "table_context": {
+          "table_headers": [
+            "Account Type",
+            "Balance",
+            "Status"
+          ],
+          "row_text": "Share Savings | \u00abshape:currency\u00bb | Active",
+          "column_header": "Status"
+        },
+        "css_path": "body:nth-of-type(1) > table:nth-of-type(3) > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(3)",
+        "xpath": "/html/body[1]/table[3]/tbody[1]/tr[2]/td[3]",
+        "bbox": [
+          465.65625,
+          160.0,
+          71.53125,
+          27.0
+        ],
+        "verified_locators": [
+          {
+            "strategy": "table_cell",
+            "table_has_header": "Account Type",
+            "row_contains": "Share Savings",
+            "column_header": "Status"
+          },
+          {
+            "strategy": "css",
+            "selector": "body:nth-of-type(1) > table:nth-of-type(3) > tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(3)"
+          }
+        ]
+      },
+      "value": null,
+      "secret_name": null,
+      "output_name": "account_status",
+      "page_before": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Summary",
+          "Accounts"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Name",
+          "Account Type",
+          "Balance",
+          "Status",
+          "New Search"
+        ]
+      },
+      "page_after": {
+        "url": "http://127.0.0.1:8000/console",
+        "title": "MockBank Core",
+        "headings": [
+          "MockBank Core",
+          "Member Summary",
+          "Accounts"
+        ],
+        "visible_texts": [
+          "Home",
+          "Member Lookup",
+          "Member Number",
+          "Name",
+          "Account Type",
+          "Balance",
+          "Status",
+          "New Search"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "reasoning": "next step"
+    }
+  ],
+  "status": "completed",
+  "outputs": {
+    "savings_balance": "$2,450.17",
+    "account_status": "Active"
+  }
+}

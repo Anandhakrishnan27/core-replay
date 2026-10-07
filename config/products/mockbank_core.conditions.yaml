@@ -1,0 +1,69 @@
+# Condition pack for the vendor product `mockbank_core`: screens this product shows regardless of which
+# capability is running. Curated once per product, reviewed like code, attached by the compiler
+# (cua/compiler/conditions_library.py) to every capability compiled for this product.
+#
+# Each condition uses the artifact's own KnownCondition shape (detect / handler / classification), plus:
+#   applies_to: all            watch after every step
+#   applies_to: search_submit  watch only after the step that submits a search (the first click/press
+#                              after the last fill); dropped if the capability has no such step
+#   {entity} / {ENTITY}        in the id or outcome: the searched input's name without its _id/_number
+#                              suffix (member_id → member / MEMBER)
+# Conditions are evaluated in declared order, so business outcomes come first.
+# `maint` (Maintenance Window) is deliberately absent: replay must treat it as UNKNOWN_STATE.
+
+product: mockbank_core
+
+targets:
+  notice_ok_button:
+    description: "OK button on the 'System Notice' interstitial"
+    locators:
+      - { strategy: role, role: button, name: "OK" }
+      - { strategy: css, selector: "div.sysnotice input[value='OK']" }
+    rationale: "The interstitial can open in any frame, so no frame_path; OK is its only control."
+
+conditions:
+  "{entity}_not_found":
+    classification: business_outcome
+    description: "Search returned no record for the entered {entity} identifier"
+    detect: { any_of: [{ kind: text_present, text: "No member found" }], timeout_ms: 1500 }
+    handler: { do: return_outcome, outcome: "{ENTITY}_NOT_FOUND" }
+    applies_to: search_submit
+
+  system_notice:
+    classification: recoverable
+    description: "'System Notice' interstitial dialog"
+    detect: { any_of: [{ kind: text_present, text: "System Notice" }], timeout_ms: 500 }
+    handler: { do: dismiss, target: notice_ok_button, max_times: 2 }
+    applies_to: all
+
+  still_processing:
+    classification: recoverable
+    description: "Server-side 'Processing, please wait' page"
+    detect: { any_of: [{ kind: text_present, text: "Processing, please wait" }], timeout_ms: 500 }
+    handler: { do: wait_until_clear, max_attempts: 3, backoff_ms: 2000 }
+    applies_to: all
+
+  session_expired:
+    classification: recoverable
+    description: "Session timed out; login page shown. Re-authenticate via the session provider once, else escalate."
+    detect:
+      any_of:
+        - { kind: url_matches, pattern: "/login" }
+        - { kind: text_present, text: "Your session has expired" }
+      timeout_ms: 500
+    handler: { do: reauthenticate, max_attempts: 1 }
+    applies_to: all
+
+  permission_denied:
+    classification: hard_failure
+    description: "Service account lacks access"
+    detect: { any_of: [{ kind: text_present, text: "You are not authorized" }], timeout_ms: 500 }
+    handler: { do: fail, category: PERMISSION_DENIED }
+    applies_to: all
+
+  app_error:
+    classification: hard_failure
+    description: "Generic application error page"
+    detect: { any_of: [{ kind: text_present, text: "An unexpected error has occurred" }], timeout_ms: 500 }
+    handler: { do: fail, category: APP_ERROR }
+    applies_to: all
