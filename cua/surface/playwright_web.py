@@ -6,6 +6,7 @@ Responsibilities:
   - descend frame_path; resolve ranked locators + MatchRule; Playwright auto-waits for actionability
   - single-shot predicate checks (polling/race lives in cua.replay.checks)
   - masked screenshots (sensitive targets + tenant mask_selectors), redacted DOM dumps
+  - evidence screenshots may show tenant-configured partial values ("•••-••-7731"), computed in the page
 The network allowlist and tracing live on the context (cua.surface.browser), so they cover login too.
 """
 
@@ -13,13 +14,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from playwright.async_api import ElementHandle, Frame, Page
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator as PWLocator
 
-from cua.config import Policy
+from cua.config import Policy, RevealRule
 from cua.evidence.logger import RunLogger
 from cua.handoff.controller import SessionControl
 from cua.safety.policy import Mode, NeedsHuman, PolicyGate, PolicyViolation
@@ -57,7 +59,8 @@ from cua.surface.base import ActionFailed, Observation, Resolved, TargetAmbiguou
 from cua.surface.locators import element_at, frames_for, to_playwright
 from cua.surface.wait import poll_until
 
-MASK_COLOR = "#FF00FF"
+MASK_COLOR = "#3C3C3C"  # neutral redaction gray
+REVEAL_ATTR = "data-cua-reveal"
 
 _TEXT_JS = (
     "e => ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.tagName) ? e.value : (e.innerText ?? e.textContent)"
@@ -89,10 +92,73 @@ _RAW_BLOCK_RE = re.compile(r"(<(style|script)\b.*?</\2>)", re.S | re.I)
 # control: data on screen that no artifact target names (e.g. another account's balance) must not leak.
 # Over-masking is the safe direction.
 _DIGIT_RE = re.compile(r"\d")
-_LEAF = "body *:not(:has(*))"
+_LEAF = f"body *:not(:has(*)):not([{REVEAL_ATTR}])"
 _TEXT_ENTRY = (
     "input:not([type]), input[type=text], input[type=search], input[type=number], input[type=tel], "
     "input[type=email], input[type=password], textarea"
+)
+
+
+# Partial reveal for evidence screenshots (tenant `screenshot_reveal`). Runs in the page so raw values
+# never reach Python: each matching LEAF cell's text is swapped for its partial form and tagged, which
+# exempts it from the mask_selectors and digit masks; the original stays in a page-side map until
+# _RESTORE_JS. Anything that can't be transformed safely is left untouched, i.e. fully masked.
+_REVEAL_JS = (
+    """(rules) => {
+  const norm = (t) => (t || '').replace(/\\s+/g, ' ').trim();
+  const DOT = '\\u2022', ALNUM = /[A-Za-z0-9]/;
+  const style = {
+    last: (t, n) => {
+      let left = n;
+      const out = Array.from(t).reverse().map((c) => !ALNUM.test(c) ? c : (left-- > 0 ? c : DOT)).reverse();
+      return Array.from(t).filter((c) => ALNUM.test(c)).length > n ? out.join('') : null;  // too short: hide
+    },
+    initials: (t) => t.split(' ').filter((w) => ALNUM.test(w[0] || ''))
+      .map((w) => w[0].toUpperCase() + '.').join(' ') || null,
+    email: (t) => {
+      const at = t.lastIndexOf('@');
+      return at > 0 ? t[0] + DOT.repeat(3) + t.slice(at) : null;
+    },
+    keep: (t) => t,
+  };
+  const done = window.__cuaReveal || new Map();
+  for (const r of rules) {
+    let els = [];
+    try { els = Array.from(document.querySelectorAll(r.selector)); } catch (_) { continue; }
+    for (const e of els) {
+      if (done.has(e) || e.children.length) continue;
+      const label = e.previousElementSibling;
+      if (r.caption !== null && norm(label && label.textContent) !== r.caption) continue;
+      const original = e.textContent, shown = style[r.style](norm(original), r.keep);
+      if (!shown) continue;
+      done.set(e, { original, shown });
+      e.textContent = shown;
+      e.setAttribute('"""
+    + REVEAL_ATTR
+    + """', '');
+    }
+  }
+  window.__cuaReveal = done;
+  return done.size;
+}"""
+)
+# Undo _REVEAL_JS. Returns how many revealed cells the PAGE changed meanwhile: such a cell may have shown
+# fresh raw text unmasked, so the caller discards that screenshot and takes a fully masked one.
+_RESTORE_JS = (
+    """() => {
+  const done = window.__cuaReveal;
+  window.__cuaReveal = undefined;
+  if (!done) return 0;
+  let tampered = 0;
+  for (const [e, v] of done) {
+    if (e.textContent !== v.shown) tampered += 1;
+    e.textContent = v.original;
+    e.removeAttribute('"""
+    + REVEAL_ATTR
+    + """');
+  }
+  return tampered;
+}"""
 )
 
 
@@ -129,6 +195,7 @@ class PlaywrightWebSurface:
         confirmed: bool = False,
         targets: dict[str, Target] | None = None,
         mask_selectors: Sequence[str] = (),
+        reveal_rules: Sequence[RevealRule] = (),
         control: SessionControl | None = None,
     ) -> None:
         self.page = page
@@ -139,6 +206,7 @@ class PlaywrightWebSurface:
         self.confirmed = confirmed
         self.targets = targets or {}
         self.mask_selectors = list(mask_selectors)
+        self.reveal_rules = list(reveal_rules)
         self.control = control
         self._snapshots = 0
 
@@ -526,7 +594,8 @@ class PlaywrightWebSurface:
                     if not isinstance(loc, CoordinateLocator)
                 )
         for frame in self.page.frames:
-            masks.extend(frame.locator(sel) for sel in self.mask_selectors)
+            # A cell showing a partial value (see _REVEAL_JS) is exempt; sensitive targets above are not.
+            masks.extend(frame.locator(f":is({sel}):not([{REVEAL_ATTR}])") for sel in self.mask_selectors)
             masks.append(frame.locator(_LEAF, has_text=_DIGIT_RE))
             masks.append(frame.locator(_TEXT_ENTRY))
         return masks
@@ -542,17 +611,61 @@ class PlaywrightWebSurface:
         html = await frame.evaluate(_SERIALIZE_JS, {"paths": paths, "selectors": self.mask_selectors})
         return _redact_html(str(html))
 
+    async def reveal(self) -> int:
+        """Swap tenant-configured masked cells for their partial form, in every frame. Pair with restore()."""
+        rules = [r.model_dump() for r in self.reveal_rules]
+        count = 0
+        for frame in self.page.frames:
+            try:
+                count += int(await frame.evaluate(_REVEAL_JS, rules))
+            except PlaywrightError:
+                continue  # detached mid-snapshot: nothing revealed there, so it stays fully masked
+        return count
+
+    async def restore(self) -> bool:
+        """Undo reveal(). False if the page changed a revealed cell meanwhile: discard that screenshot."""
+        clean = True
+        for frame in self.page.frames:
+            try:
+                clean = int(await frame.evaluate(_RESTORE_JS)) == 0 and clean
+            except PlaywrightError:
+                continue  # navigated away: the revealed document is gone with it
+        return clean
+
+    async def _screenshot(self, path: Path, *, reveal: bool) -> bool:
+        """Masked full-page screenshot. With `reveal`, partial values show; False means discard it."""
+
+        async def shoot() -> None:
+            # mask locators are lazy: built here, they skip cells reveal() tagged
+            mask = self._mask_locators()
+            await self.page.screenshot(
+                path=path, full_page=True, mask=mask, mask_color=MASK_COLOR, animations="disabled"
+            )
+
+        if not reveal:
+            await shoot()
+            return True
+        try:
+            await self.reveal()
+            await shoot()
+        finally:
+            clean = await self.restore()
+        return clean
+
     async def snapshot(self, reason: str, *, dom: bool = False) -> list[str]:
         """Masked screenshot (+ redacted DOM per frame). Returns evidence-relative paths.
+
+        Only this screenshot shows tenant `screenshot_reveal` partial values; DOM dumps are taken after
+        restore() and mask those cells completely.
 
         `reason` is used in file names, so callers pass static strings (step ids), never data.
         """
         self._snapshots += 1
         stem = f"{self._snapshots:02d}_{_slug(reason)}"
         png = self.logger.dir / "steps" / f"{stem}.png"
-        await self.page.screenshot(
-            path=png, full_page=True, mask=self._mask_locators(), mask_color=MASK_COLOR, animations="disabled"
-        )
+        if not await self._screenshot(png, reveal=bool(self.reveal_rules)):
+            self.logger.event("reveal_discarded", reason=_slug(reason))
+            await self._screenshot(png, reveal=False)
         paths = [png]
         if dom:
             for i, frame in enumerate(self.page.frames):

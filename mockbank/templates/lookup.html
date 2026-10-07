@@ -1,12 +1,12 @@
-{% extends "_base.html" %}
-{% block body %}
-<table width="100%" cellpadding="0" cellspacing="0">
-  <tr><td class="hdr">Member Lookup</td></tr>
-</table>
-<br>
+{% extends "_screen.html" %}
+{% block heading %}Member Lookup{% endblock %}
+{% block screen %}MBR100{% endblock %}
+{% block content %}
+<table class="sect" width="420" cellpadding="0" cellspacing="0"><tr><td>Find a Member</td></tr></table>
 <form name="lookup" method="post" action="/console/mbrlookup">
-<table border="0" cellpadding="3">
+<table class="box" width="420" border="0" cellpadding="4">
   <tr><td class="cap">Member Number</td><td><input type="text" name="mbrno" size="12" maxlength="10"></td></tr>
+  <tr><td></td><td class="hint">Digits only, up to 10 characters.</td></tr>
   <tr><td></td><td><input type="submit" value="Search"></td></tr>
 </table>
 </form>

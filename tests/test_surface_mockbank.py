@@ -9,7 +9,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import pytest
+from pydantic import ValidationError
 
+from cua.config import RevealRule, Tenant, load_tenant
 from cua.handoff.controller import NotInControl, SessionControl
 from cua.handoff.models import InterventionRequest
 from cua.safety.policy import NeedsHuman, PolicyGate, PolicyViolation
@@ -25,10 +27,11 @@ from cua.schema.artifact import (
 )
 from cua.session.provider import SessionProvider
 from cua.surface.base import ActionFailed
-from cua.surface.playwright_web import PlaywrightWebSurface
+from cua.surface.playwright_web import MASK_COLOR, PlaywrightWebSurface
 from cua.surface.wait import poll_until
-from mockbank.data import find_member
-from tests.conftest import log_events
+from mockbank.data import Member, find_member
+from tests.conftest import ROOT, log_events
+from tests.test_mockbank import _detail_rows
 
 # ---- helpers ---------------------------------------------------------------------------------- #
 
@@ -393,15 +396,20 @@ def decode_png(data: bytes) -> tuple[int, int, int, bytes]:
     return width, height, bpp, bytes(out)
 
 
+def mask_rgb() -> tuple[int, int, int]:
+    return tuple(int(MASK_COLOR[i : i + 2], 16) for i in (1, 3, 5))  # type: ignore[return-value]
+
+
 def region_is_mask_color(png: tuple[int, int, int, bytes], box: dict) -> bool:
     width, _, bpp, px = png
+    rgb = mask_rgb()
     x0, y0 = int(box["x"]) + 2, int(box["y"]) + 2
     x1, y1 = int(box["x"] + box["width"]) - 2, int(box["y"] + box["height"]) - 2
     assert x1 > x0 and y1 > y0
     for y in range(y0, y1):
         for x in range(x0, x1):
             i = (y * width + x) * bpp
-            if tuple(px[i : i + 3]) != (0xFF, 0x00, 0xFF):
+            if tuple(px[i : i + 3]) != rgb:
                 return False
     return True
 
@@ -416,12 +424,10 @@ async def test_member_page_snapshot_has_no_member_name_number_or_balances(
     files = await console.snapshot("member_summary", dom=True)
     assert files[0].endswith(".png") and not Path(files[0]).is_absolute()
 
-    # Screenshot: member number + name cells (tenant mask_selectors) and the balance (sensitive target)
-    # are painted over completely.
+    # Screenshot: balances are painted over completely (detail cells: see the reveal tests below).
     main = session.page.frame(name="main")
     png = decode_png((run_logger.dir / files[0]).read_bytes())
-    regions = [main.locator("td.cap + td").nth(0), main.locator("td.cap + td").nth(1)]
-    regions.append(main.locator("td.amt").nth(1))  # Share Savings row (second row for 10002)
+    regions = [main.locator("td.amt").nth(1)]  # Share Savings row (second row for 10002): sensitive target
     regions.append(main.locator("td.amt").nth(0))  # Checking balance: not a target, masked by the digit rule
     for loc in regions:
         assert region_is_mask_color(png, await loc.bounding_box())
@@ -437,3 +443,183 @@ async def test_member_page_snapshot_has_no_member_name_number_or_balances(
     assert "«masked»" in dom and "«digits:sha256:" in dom
     log = (run_logger.dir / "run.jsonl").read_text()
     assert member.name not in log and member.member_id not in log
+
+
+# ---- partial reveal (tenant screenshot_reveal): evidence screenshots only ---------------------- #
+
+B = "\u2022"
+# 10002 as the evidence screenshot shows it, caption → value; None = no rule, fully masked.
+REVEALED_10002 = {
+    "Member Number": f"{B * 3}02",
+    "Name": "M. T.",
+    "First Name": "M.",
+    "Last Name": "T.",
+    "SSN": f"{B * 3}-{B * 2}-7731",
+    "Date of Birth": None,
+    "Phone": f"({B * 3}) {B * 3}-{B * 2}67",
+    "Email": f"m{B * 3}@example.test",
+    "Address": None,
+    "City": None,
+    "State": "IL",
+    "ZIP": f"{B * 3}98",
+}
+_CELLS_JS = "els => els.map(e => [e.previousElementSibling ? e.previousElementSibling.textContent : '', \
+e.textContent, e.hasAttribute('data-cua-reveal')])"
+
+
+def member_pii(member: Member) -> list[str]:
+    """Every seeded PII value the Member Summary shows (State alone is not identifying)."""
+    a = member.address
+    return [
+        member.member_id,
+        member.first_name,
+        member.last_name,
+        member.ssn,
+        member.dob,
+        member.phone,
+        member.email,
+        a.street,
+        a.city,
+        a.zip,
+        *(acct.account_number for acct in member.accounts),
+    ]
+
+
+async def open_summary(surface, artifact, member_id: str):
+    member = find_member(member_id)
+    assert member is not None
+    await search(surface, artifact, member.member_id)
+    assert await wait_holds(surface, artifact.success, artifact)  # member_header visible (10003 too)
+    return member
+
+
+async def test_reveal_shows_partial_values_then_restores(console, session, artifact):
+    member = await open_summary(console, artifact, "10002")
+    main = session.page.frame(name="main")
+    assert main is not None
+    before = await main.locator("td.cap + td, td.acctno").evaluate_all(_CELLS_JS)
+
+    assert await console.reveal() == 9 + len(member.accounts)
+    rows = await main.locator("td.cap + td").evaluate_all(_CELLS_JS)
+    cells = {cap: (text, tagged) for cap, text, tagged in rows}
+    raw = dict(_detail_rows(member))
+    for caption, shown in REVEALED_10002.items():
+        assert cells[caption] == ((shown, True) if shown else (raw[caption], False)), caption
+    acctnos = await main.locator("td.acctno").all_inner_texts()
+    assert acctnos == [B * 6 + a.account_number[-4:] for a in member.accounts]
+
+    assert await console.restore() is True
+    assert await main.locator("td.cap + td, td.acctno").evaluate_all(_CELLS_JS) == before
+    assert await session.page.locator("[data-cua-reveal]").count() == 0
+
+
+@pytest.mark.parametrize("member_id", ["10001", "10003"])
+async def test_member_page_snapshot_reveals_only_configured_fields(
+    console, session, artifact, run_logger, member_id
+):
+    member = await open_summary(console, artifact, member_id)
+    main = session.page.frame(name="main")
+    assert main is not None
+
+    async def boxes(sel: str) -> list[dict]:
+        return [b for b in [await loc.bounding_box() for loc in await main.locator(sel).all()] if b]
+
+    # Partial values are shorter, so the table is narrower while revealed: measure in that layout.
+    await console.reveal()
+    detail, amounts, acctnos = await boxes("td.cap + td"), await boxes("td.amt"), await boxes("td.acctno")
+    email_caption = await main.locator("td.cap", has_text="Email").bounding_box()
+    assert await console.restore() is True
+
+    files = await console.snapshot("member_summary", dom=True)
+    png = decode_png((run_logger.dir / files[0]).read_bytes())
+    # Fields without a rule (and every balance) are painted over completely; fields with one show a
+    # partial value instead of a solid box; captions stay readable.
+    assert len(detail) == len(REVEALED_10002)
+    for (caption, shown), box in zip(REVEALED_10002.items(), detail, strict=True):
+        assert region_is_mask_color(png, box) is (shown is None), caption
+    assert all(region_is_mask_color(png, b) for b in amounts)
+    assert len(acctnos) == len(member.accounts)
+    assert not any(region_is_mask_color(png, b) for b in acctnos)
+    assert email_caption is not None and not region_is_mask_color(png, email_caption)
+
+    # DOM dumps are taken after restore(): no raw value and no partial value either.
+    dom = "".join((run_logger.dir / f).read_text() for f in files[1:])
+    assert "Email" in dom and "Date of Birth" in dom
+    for raw in member_pii(member):
+        assert raw not in dom, f"{raw!r} leaked into the DOM dump"
+    assert "example.test" not in dom and "900-" not in dom and "555-01" not in dom
+    assert B not in dom and "data-cua-reveal" not in dom
+    # The live page is back to normal for the next step.
+    assert await session.page.locator("[data-cua-reveal]").count() == 0
+    assert member.ssn in await main.locator("td.cap + td").all_inner_texts()
+
+
+async def test_no_reveal_rules_masks_every_detail_field(console, make_surface, session, artifact, run_logger):
+    surface = make_surface(reveal_rules=())
+    member = await open_summary(surface, artifact, "10001")
+    files = await surface.snapshot("member_summary")
+    main = session.page.frame(name="main")
+    assert main is not None
+    png = decode_png((run_logger.dir / files[0]).read_bytes())
+    values, acctnos = main.locator("td.cap + td"), main.locator("td.acctno")
+    assert await values.count() == 12 and await acctnos.count() == len(member.accounts)
+    for loc in [*await values.all(), *await acctnos.all()]:
+        box = await loc.bounding_box()
+        assert box is not None and region_is_mask_color(png, box)
+
+
+async def test_unknown_caption_or_short_value_stays_masked(console, make_surface, session, artifact):
+    surface = make_surface(
+        reveal_rules=[
+            RevealRule(selector="td.cap + td", caption="Mothers Maiden Name", style="keep"),
+            RevealRule(selector="td.cap + td", caption="State", style="last", keep=4),  # "IL": too short
+        ]
+    )
+    await open_summary(surface, artifact, "10001")
+    assert await surface.reveal() == 0
+    assert await surface.restore() is True
+
+
+async def test_page_changing_a_revealed_cell_discards_the_screenshot(
+    console, session, artifact, run_logger, monkeypatch
+):
+    await open_summary(console, artifact, "10002")
+    main = session.page.frame(name="main")
+    assert main is not None
+    reveal = console.reveal
+
+    async def reveal_then_page_rewrites() -> int:
+        n = await reveal()
+        # e.g. a page script refreshing the cell: its new text would not be masked
+        await main.evaluate("() => { document.querySelector('[data-cua-reveal]').textContent = 'fresh'; }")
+        return n
+
+    monkeypatch.setattr(console, "reveal", reveal_then_page_rewrites)
+    files = await console.snapshot("member_summary")
+    assert any(e["event"] == "reveal_discarded" for e in log_events(run_logger))
+    png = decode_png((run_logger.dir / files[0]).read_bytes())
+    for loc in await main.locator("td.cap + td").all():  # the retake is fully masked
+        assert region_is_mask_color(png, await loc.bounding_box())
+
+
+def test_tenants_mask_and_reveal_the_same_member_fields(tenant):
+    beta = load_tenant("cu_beta", ROOT / "config")
+    assert {"td.cap + td", "td.acctno"} <= set(tenant.mask_selectors)
+    assert beta.mask_selectors == tenant.mask_selectors
+    assert beta.screenshot_reveal == tenant.screenshot_reveal
+    revealed = {r.caption for r in tenant.screenshot_reveal if r.selector == "td.cap + td"}
+    assert revealed == {cap for cap, shown in REVEALED_10002.items() if shown}
+
+
+@pytest.mark.parametrize(
+    "rule,error",
+    [
+        ({"selector": "td.other", "style": "keep"}, "not in mask_selectors"),
+        ({"selector": "td.acctno", "style": "full_name"}, "style"),
+        ({"selector": "td.acctno", "style": "last", "keep": 9}, "keep"),
+    ],
+)
+def test_reveal_rules_are_validated(tenant, rule, error):
+    data = tenant.model_dump() | {"screenshot_reveal": [rule]}
+    with pytest.raises(ValidationError, match=error):
+        Tenant.model_validate(data)

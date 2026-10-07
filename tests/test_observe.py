@@ -98,13 +98,16 @@ async def test_member_summary_shows_shapes_never_values(surfaces, artifact):
     )
     assert cell.text == "«shape:currency»" and cell.frame_path == ["main"]
     assert cell.table_context is not None
-    assert cell.table_context.table_headers == ["Account Type", "Balance", "Status"]
-    assert cell.table_context.row_text == "Share Savings | «shape:currency» | Active"
+    assert cell.table_context.table_headers == ["Account Type", "Balance", "Status", "Account Number"]
+    assert cell.table_context.row_text == "Share Savings | «shape:currency» | Active | «masked»"
     assert cell.nearby_text == {"left": "Share Savings", "above": "Balance"}
 
-    assert obs.aria_snapshot.count("«masked»") == 2  # member number + name (tenant mask_selectors)
+    # 12 caption/value cells + one account number per account (tenant mask_selectors)
+    assert obs.aria_snapshot.count("«masked»") == 12 + len(member.accounts)
+    for raw in (member.ssn, member.phone, member.email, member.first_name, member.address.street):
+        assert raw not in text
     assert "Member Summary" in obs.page.headings
-    assert {"Account Type", "Balance", "Status"} <= set(obs.page.visible_texts)
+    assert {"Account Type", "Balance", "Status", "Account Number"} <= set(obs.page.visible_texts)
     assert not any(c.isdigit() for t in obs.page.visible_texts for c in t)
 
 

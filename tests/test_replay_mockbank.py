@@ -169,7 +169,14 @@ def assert_no_raw_pii(root: Path) -> None:
     for path in root.rglob("*"):
         if path.suffix in (".json", ".jsonl", ".html"):
             text = path.read_text()
-            for raw in ("10002", "1,203.55", "1203.55", "Test Member B"):
+            for raw in (
+                "10002",
+                "1,203.55",
+                "1203.55",
+                "Marlowe Tenby",
+                "900-58-7731",
+                "marlowe.tenby@example.test",
+            ):
                 assert raw not in text, f"{raw!r} leaked into {path.name}"
 
 

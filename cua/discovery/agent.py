@@ -226,6 +226,7 @@ async def discover(
                 logger,
                 mode="discovery",
                 mask_selectors=tenant.mask_selectors,
+                reveal_rules=tenant.screenshot_reveal,
                 control=control,
             )
             agent = _Agent(

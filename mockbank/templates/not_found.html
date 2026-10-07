@@ -1,8 +1,9 @@
-{% extends "_base.html" %}
-{% block body %}
-<table width="100%" cellpadding="0" cellspacing="0">
-  <tr><td class="hdr">Member Lookup</td></tr>
+{% extends "_screen.html" %}
+{% block heading %}Member Lookup{% endblock %}
+{% block screen %}MBR100{% endblock %}
+{% block content %}
+<table class="msgbox warn" cellpadding="0" cellspacing="0">
+  <tr><td class="glyph"></td><td class="text"><p class="msg">No member found for the number entered.</p></td></tr>
 </table>
-<p class="msg">No member found for the number entered.</p>
 <a href="/console/mbrlookup">New Search</a>
 {% endblock %}

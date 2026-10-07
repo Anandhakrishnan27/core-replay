@@ -101,7 +101,7 @@ def test_fixture_trace_compiles_to_the_target_shape(trace, compile_):
 
 def test_artifact_holds_no_values_and_no_tenant_host(trace, compile_):
     text = compile_(trace).model_dump_json()
-    for raw in ["10001", "2,450.17", "2450.17", "Test Member", "127.0.0.1", "localhost"]:
+    for raw in ["10001", "2,450.17", "2450.17", "Avery Quill", "127.0.0.1", "localhost"]:
         assert raw not in text, raw
 
 

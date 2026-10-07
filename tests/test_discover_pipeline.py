@@ -21,7 +21,7 @@ from tests.test_discovery_agent import GOAL, HAPPY_PATH, PARAMS, StubMessages, c
 
 CAP_ID = "mockbank.member.lookup_savings_balance"
 FIXTURE_TRACE = Path(__file__).parent / "fixtures" / "discovery_trace.notice.json"
-RAW = ["10001", "2,450.17", "2450.17", "Test Member A"]
+RAW = ["10001", "2,450.17", "2450.17", "Avery Quill", "900-41-2087", "avery.quill@example.test"]
 
 
 @pytest.fixture

@@ -423,6 +423,7 @@ class _Run:
             confirmed=confirmed,
             targets=self.targets,
             mask_selectors=tenant.mask_selectors,
+            reveal_rules=tenant.screenshot_reveal,
             control=self.control,
         )
         self.operator = operator

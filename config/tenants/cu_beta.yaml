@@ -13,3 +13,22 @@ overrides:
         locators:
           - { strategy: label, label: "Account Holder #" }
           - { strategy: near_text, anchor_text: "Account Holder #", relation: following_input, role: textbox }
+# PII on screen that is not an artifact target. Keep in sync with cu_alpha.
+#   td.cap + td : every caption/value cell on Member Summary (number, names, SSN, DOB, phone, email, address)
+#   td.acctno   : account numbers in the Accounts table
+mask_selectors:
+  - "td.cap + td"
+  - "td.acctno"
+# Partial values in EVIDENCE SCREENSHOTS only (DOM dumps, logs and the LLM stay fully masked).
+# A masked cell without a rule here (Date of Birth, Address, City, balances) is hidden completely.
+screenshot_reveal:
+  - { selector: "td.cap + td", caption: "Member Number", style: last, keep: 2 }
+  - { selector: "td.cap + td", caption: "Name", style: initials }
+  - { selector: "td.cap + td", caption: "First Name", style: initials }
+  - { selector: "td.cap + td", caption: "Last Name", style: initials }
+  - { selector: "td.cap + td", caption: "SSN", style: last, keep: 4 }
+  - { selector: "td.cap + td", caption: "Phone", style: last, keep: 2 }
+  - { selector: "td.cap + td", caption: "Email", style: email }
+  - { selector: "td.cap + td", caption: "State", style: keep }
+  - { selector: "td.cap + td", caption: "ZIP", style: last, keep: 2 }
+  - { selector: "td.acctno", style: last, keep: 4 }

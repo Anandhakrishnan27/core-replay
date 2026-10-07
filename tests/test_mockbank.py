@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
+from html import escape as html_escape
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from mockbank.app import app
+from mockbank.data import MEMBERS, Member, find_member
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "mockbank/templates"
 
@@ -118,10 +120,72 @@ def test_lookup_form_hooks(client: TestClient) -> None:
 def test_member_summary(client: TestClient, member_id: str, first_row: str) -> None:
     html = _search(client, member_id).text
     assert '<td class="hdr">Member Summary</td>' in html
-    assert "<tr><th>Account Type</th><th>Balance</th><th>Status</th></tr>" in html
     rows = re.findall(r"<tr><td>([^<]+)</td><td class=\"amt\">(\$[0-9,]+\.[0-9]{2})</td>", html)
     assert rows[0][0] == first_row
     assert "Share Savings" in [r[0] for r in rows]
+
+
+def _detail_rows(member: Member) -> list[tuple[str, str]]:
+    a = member.address
+    return [
+        ("Member Number", member.member_id),
+        ("Name", f"{member.first_name} {member.last_name}"),
+        ("First Name", member.first_name),
+        ("Last Name", member.last_name),
+        ("SSN", member.ssn),
+        ("Date of Birth", member.dob),
+        ("Phone", member.phone),
+        ("Email", member.email),
+        ("Address", a.street),
+        ("City", a.city),
+        ("State", a.state),
+        ("ZIP", a.zip),
+    ]
+
+
+@pytest.mark.parametrize("member_id", ["10001", "10002", "10003"])
+def test_member_summary_shows_every_field(client: TestClient, member_id: str) -> None:
+    member = find_member(member_id)
+    assert member is not None
+    html = _search(client, member_id).text
+    # label in one cell, value in the neighbouring cell (td.cap + td: masked by tenant mask_selectors)
+    shown = re.findall(r'<tr><td class="cap">([^<]+)</td><td>([^<]*)</td></tr>', html)
+    assert shown == [(html_escape(k), html_escape(v)) for k, v in _detail_rows(member)]
+    accounts = re.findall(
+        r'<tr><td>([^<]+)</td><td class="amt">([^<]+)</td><td>([^<]+)</td>'
+        r'<td class="acctno">([^<]+)</td></tr>',
+        html,
+    )
+    assert accounts == [(a.account_type, a.balance, a.status, a.account_number) for a in member.accounts]
+
+
+@pytest.mark.parametrize("member", list(MEMBERS.values()), ids=lambda m: m.member_id)
+def test_seed_data_is_obviously_fake(member: Member) -> None:
+    assert re.fullmatch(r"900-\d{2}-\d{4}", member.ssn)
+    assert re.fullmatch(r"\(\d{3}\) 555-01\d{2}", member.phone)
+    assert member.email.endswith("@example.test")
+    assert re.fullmatch(r"\d{2}/\d{2}/\d{4}", member.dob)
+    assert re.fullmatch(r"\d{5}", member.address.zip)
+    for acct in member.accounts:
+        assert re.fullmatch(r"\d{10}", acct.account_number)
+        assert re.fullmatch(r"\$\d{1,3}(,\d{3})*\.\d{2}", acct.balance)
+
+
+@pytest.mark.parametrize("member_id", ["10001", "10002"])
+def test_accounts_table_contract_unchanged(client: TestClient, member_id: str) -> None:
+    """The artifacts' table_cell locators: header 'Account Type', columns Balance (1) and Status (2), row
+    'Share Savings'. New columns go after these, so header-based and positional lookups are unchanged."""
+    html = _search(client, member_id).text
+    header = re.search(r"<tr>((?:<th>[^<]+</th>)+)</tr>", html)
+    assert header is not None
+    assert re.findall(r"<th>([^<]+)</th>", header.group(1))[:3] == ["Account Type", "Balance", "Status"]
+    savings = re.search(
+        r'<tr><td>Share Savings</td><td class="amt">(\$[0-9,]+\.[0-9]{2})</td><td>Active</td>', html
+    )
+    assert savings is not None
+    assert (
+        html.count("Member Summary") == 1
+    )  # text locator for member_header stays unique (title is MockBank Core)
 
 
 def test_member_without_savings(client: TestClient) -> None:
@@ -130,10 +194,12 @@ def test_member_without_savings(client: TestClient) -> None:
     assert "Share Savings" not in html
 
 
-def test_unknown_member(client: TestClient) -> None:
-    r = _search(client, "99999")
+@pytest.mark.parametrize("member_id", ["99999", "10004", "00000"])
+def test_unknown_member(client: TestClient, member_id: str) -> None:
+    r = _search(client, member_id)
     assert "No member found" in r.text
-    assert "99999" not in r.text  # the number entered is not echoed
+    assert "Member Summary" not in r.text
+    assert member_id not in r.text  # the number entered is not echoed
 
 
 # --- fault cookie --------------------------------------------------------------------------------

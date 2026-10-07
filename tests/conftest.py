@@ -130,6 +130,7 @@ def make_surface(session, test_policy, gate, run_logger, artifact, tenant):
         kw.setdefault("mode", "replay")
         kw.setdefault("targets", dict(artifact.targets))
         kw.setdefault("mask_selectors", tenant.mask_selectors)
+        kw.setdefault("reveal_rules", tenant.screenshot_reveal)
         return PlaywrightWebSurface(session.page, test_policy, gate, run_logger, **kw)
 
     return make

@@ -3,7 +3,7 @@
   "id": "mockbank.member.lookup_savings_balance",
   "version": "1.0.0",
   "title": "Look up member <member_id> and read the savings balance",
-  "description": "Look up member <member_id> and read the savings balance. Fills forms but commits nothing. Compiled from discovery run 20261007T014636Z_b9dd.",
+  "description": "Look up member <member_id> and read the savings balance. Fills forms but commits nothing. Compiled from discovery run 20261007T042631Z_e4c4.",
   "app": {
     "product": "mockbank_core",
     "version_range": ">=2.0,<3.0",
@@ -436,9 +436,9 @@
     "timeout_ms": 10000
   },
   "provenance": {
-    "discovery_run_id": "20261007T014636Z_b9dd",
+    "discovery_run_id": "20261007T042631Z_e4c4",
     "model": "claude-opus-5-5",
-    "recorded_at": "2026-10-07T01:46:36.540229Z",
+    "recorded_at": "2026-10-07T04:26:31.616407Z",
     "compiler_version": "0.1.0",
     "human_assisted_steps": []
   },

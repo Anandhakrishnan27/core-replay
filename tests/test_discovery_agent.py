@@ -197,12 +197,12 @@ async def test_happy_path_records_trace_and_keeps_values_out_of_evidence(run):
 
     # The model never saw a member number, name or balance after typing.
     for page in stub.pages:
-        assert "2,450.17" not in page and "Test Member A" not in page
+        assert "2,450.17" not in page and "Avery Quill" not in page
     shown = "".join(p.split("<page", 1)[1] for p in stub.pages[3:])  # page part only, not the goal
     assert "10001" not in shown  # after the search the member number cell is masked
     # Nothing raw in the run log.
     log = log_text(result)
-    assert "10001" not in log and "2,450.17" not in log and "Test Member A" not in log
+    assert "10001" not in log and "2,450.17" not in log and "Avery Quill" not in log
     assert list((result.evidence_dir / "steps").glob("*_click.png"))
 
     # trace.json in evidence: same actions, nothing raw; the fill still matches its parameter's hash.
@@ -211,7 +211,7 @@ async def test_happy_path_records_trace_and_keeps_values_out_of_evidence(run):
     assert saved.status == "completed"
     assert saved.actions[1].value == saved.goal_values["member_id"] != "10001"
     text = result.trace_path.read_text()
-    assert "10001" not in text and "2,450.17" not in text and "Test Member A" not in text
+    assert "10001" not in text and "2,450.17" not in text and "Avery Quill" not in text
 
 
 async def test_request_shape_matches_the_documented_api(run):

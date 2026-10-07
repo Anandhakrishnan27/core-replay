@@ -1,21 +1,30 @@
-{% extends "_base.html" %}
-{% block body %}
-<table width="100%" cellpadding="0" cellspacing="0">
-  <tr><td class="hdr">Member Summary</td></tr>
-</table>
-<br>
-<table border="0" cellpadding="3">
+{% extends "_screen.html" %}
+{#- Caption/value cells (td.cap + td) and td.acctno hold member PII: tenant mask_selectors cover them.
+    Exactly 12 caption/value rows; don't add more td.cap cells to this page. -#}
+{% block heading %}Member Summary{% endblock %}
+{% block screen %}MBR110{% endblock %}
+{% block content %}
+<table class="sect" width="100%" cellpadding="0" cellspacing="0"><tr><td>Member Information</td></tr></table>
+<table class="box" border="0" cellpadding="3">
   <tr><td class="cap">Member Number</td><td>{{ member.member_id }}</td></tr>
   <tr><td class="cap">Name</td><td>{{ member.name }}</td></tr>
+  <tr><td class="cap">First Name</td><td>{{ member.first_name }}</td></tr>
+  <tr><td class="cap">Last Name</td><td>{{ member.last_name }}</td></tr>
+  <tr><td class="cap">SSN</td><td>{{ member.ssn }}</td></tr>
+  <tr><td class="cap">Date of Birth</td><td>{{ member.dob }}</td></tr>
+  <tr><td class="cap">Phone</td><td>{{ member.phone }}</td></tr>
+  <tr><td class="cap">Email</td><td>{{ member.email }}</td></tr>
+  <tr><td class="cap">Address</td><td>{{ member.address.street }}</td></tr>
+  <tr><td class="cap">City</td><td>{{ member.address.city }}</td></tr>
+  <tr><td class="cap">State</td><td>{{ member.address.state }}</td></tr>
+  <tr><td class="cap">ZIP</td><td>{{ member.address.zip }}</td></tr>
 </table>
-<br>
-<b>Accounts</b>
-<table border="1" cellpadding="3" cellspacing="0">
-  <tr><th>Account Type</th><th>Balance</th><th>Status</th></tr>
+<table class="sect" width="100%" cellpadding="0" cellspacing="0"><tr><td>Accounts</td></tr></table>
+<table class="grid" cellpadding="3" cellspacing="0">
+  <tr><th>Account Type</th><th>Balance</th><th>Status</th><th>Account Number</th></tr>
   {% for acct in member.accounts %}
-  <tr><td>{{ acct.account_type }}</td><td class="amt">{{ acct.balance }}</td><td>{{ acct.status }}</td></tr>
+  <tr><td>{{ acct.account_type }}</td><td class="amt">{{ acct.balance }}</td><td>{{ acct.status }}</td><td class="acctno">{{ acct.account_number }}</td></tr>
   {% endfor %}
 </table>
-<br>
 <a href="/console/mbrlookup">New Search</a>
 {% endblock %}

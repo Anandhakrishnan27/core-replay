@@ -1,8 +1,20 @@
 {% extends "_base.html" %}
+{#- Greyed items are plain text, not links: realistic menu noise that cannot be clicked. -#}
+{% block body_class %} class="nav"{% endblock %}
 {% block body %}
-<table width="100%" cellpadding="2" cellspacing="0">
+<table width="100%" cellpadding="0" cellspacing="0">
   <tr><td class="hdr">MockBank Core</td></tr>
-  <tr><td><a href="/console/home" target="main">Home</a></td></tr>
-  <tr><td><a href="/console/mbrlookup" target="main">Member Lookup</a></td></tr>
+  <tr><td class="brand">Brindlewood Federal Credit Union<br>Teller Console</td></tr>
+</table>
+<table width="100%" cellpadding="0" cellspacing="0">
+  <tr><td class="grp">Member Services</td></tr>
+  <tr><td class="item"><a href="/console/home" target="main">Home</a></td></tr>
+  <tr><td class="item"><a href="/console/mbrlookup" target="main">Member Lookup</a></td></tr>
+  <tr><td class="off">Account Inquiry</td></tr>
+  <tr><td class="off">Loan Inquiry</td></tr>
+  <tr><td class="grp">Operations</td></tr>
+  <tr><td class="off">Transfers</td></tr>
+  <tr><td class="off">Teller Drawer</td></tr>
+  <tr><td class="off">Reports</td></tr>
 </table>
 {% endblock %}

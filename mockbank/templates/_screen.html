@@ -1,0 +1,15 @@
+{% extends "_base.html" %}
+{#- Main-frame screen: title bar, content, status bar (screen code first).
+    The title cell stays alone in its row: observe() reads a bold cell alone in its row as a heading.
+    Children set `heading` inline ({% block heading %}Name{% endblock %}) so td.hdr text stays exact. -#}
+{% block body %}
+<table class="titlebar" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td class="hdr">{% block heading %}{% endblock %}</td></tr>
+</table>
+<div class="content">
+{% block content %}{% endblock %}
+</div>
+<table class="statusbar" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td class="scr">{% block screen %}{% endblock %}</td><td>Branch 001 &middot; Workstation WS-04</td><td align="right">Core v2.3</td></tr>
+</table>
+{% endblock %}
