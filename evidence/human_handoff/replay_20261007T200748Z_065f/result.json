@@ -1,0 +1,98 @@
+{
+  "run_id": "20261007T200748Z_065f",
+  "mode": "replay",
+  "capability_id": "mockbank.member.lookup_savings_balance",
+  "capability_version": "1.1.0",
+  "tenant_id": "cu_alpha",
+  "status": "success",
+  "outcome_code": "SUCCESS",
+  "outputs": {
+    "savings_balance": "\u00absavings_balance:sha256:fbd501ca6a\u00bb"
+  },
+  "failure": null,
+  "recoveries": [],
+  "handoffs": [
+    {
+      "intervention_id": "int_dd51ce83",
+      "reason": "screen matches neither the checkpoint nor any known condition",
+      "step_id": "click_search_button",
+      "operator_id": "operator",
+      "requested_at": "2026-10-07T20:08:00.923696Z",
+      "taken_at": "2026-10-07T20:08:03.741070Z",
+      "returned_at": "2026-10-07T20:09:30.576175Z",
+      "resolution": "resumed",
+      "resumed_at_step": "read_savings_balance",
+      "human_actions": [
+        {
+          "at": "2026-10-07T20:08:06.839503Z",
+          "kind": "click",
+          "target_hint": "link 'Try Again'",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:08:06.857572Z",
+          "kind": "navigate",
+          "target_hint": "main \u2192 /console/mbrlookup/result",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:08:43.569742Z",
+          "kind": "navigate",
+          "target_hint": "top \u2192 /console",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:08:43.579054Z",
+          "kind": "navigate",
+          "target_hint": "nav \u2192 /console/nav",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:08:43.580200Z",
+          "kind": "navigate",
+          "target_hint": "main \u2192 /console/home",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:08:45.011845Z",
+          "kind": "click",
+          "target_hint": "td 'Member Lookup'",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:08:45.599339Z",
+          "kind": "click",
+          "target_hint": "link 'Member Lookup'",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:08:45.615745Z",
+          "kind": "navigate",
+          "target_hint": "main \u2192 /console/mbrlookup",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:09:04.090687Z",
+          "kind": "fill",
+          "target_hint": "textbox 'Member Number'",
+          "value": "\u00abredacted:len=5\u00bb"
+        },
+        {
+          "at": "2026-10-07T20:09:04.095053Z",
+          "kind": "click",
+          "target_hint": "button 'Search'",
+          "value": null
+        },
+        {
+          "at": "2026-10-07T20:09:04.108019Z",
+          "kind": "navigate",
+          "target_hint": "main \u2192 /console/mbrlookup",
+          "value": null
+        }
+      ]
+    }
+  ],
+  "started_at": "2026-10-07T20:07:48.803871Z",
+  "duration_ms": 102280,
+  "evidence_dir": "evidence/_scratch/replay_20261007T200748Z_065f"
+}

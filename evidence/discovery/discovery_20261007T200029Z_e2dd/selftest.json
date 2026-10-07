@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "reason": "replay succeeded with the discovery inputs; outputs match; no locator drift",
+  "replay_run_id": "20261007T200045Z_2938",
+  "status": "success",
+  "outcome_code": "SUCCESS",
+  "failure_category": null,
+  "drifted_targets": [],
+  "evidence_dir": "evidence/_scratch/discovery_20261007T200029Z_e2dd/replay_20261007T200045Z_2938"
+}

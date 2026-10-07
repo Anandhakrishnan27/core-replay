@@ -135,6 +135,7 @@ def test_discover_attaches_the_operator_by_default(monkeypatch, args, attached):
     )
     assert result.exit_code == 2, result.output
     assert (seen["operator"] is not None) is attached
+    assert seen["evidence_root"] == agent.SCRATCH_RUNS  # git-ignored unless --evidence-dir is given
     if attached:
         assert seen["page"] == {"with_token": 200, "without": 403}
 

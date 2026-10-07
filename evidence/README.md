@@ -11,13 +11,14 @@ One folder per kind of run; each holds one or more run folders (`discovery_<run_
 | Folder | Run | Input / fault | Result |
 | --- | --- | --- | --- |
 | `discovery/` | `discovery_20261007T042631Z_e4c4` | **Real LLM discovery** (claude-opus-5-5), goal "look up member 10001 and read the savings balance" | completed → compiled → self-test passed → saved as `capabilities/mockbank/member.lookup_savings_balance/1.0.0.json` |
+| `discovery/` | `discovery_20261007T200029Z_e2dd` | **Real LLM discovery**, same goal, on the current mock bank UI (`--version 1.1.0`) | completed → compiled → self-test passed → saved as `…/1.1.0.json` (same steps and locators as 1.0.0) |
 | `replay_success/` | `replay_20261007T192138Z_00de` | `member_id=10002` (a member discovery never saw) | `success`, `SUCCESS` (balance returned to the caller; hashed here) |
 | `business_outcome/` | `replay_20261007T192139Z_36a1` | `member_id=99999` | `business_outcome`, `MEMBER_NOT_FOUND` |
 | `business_outcome/` | `replay_20261007T192141Z_e1d5` | `member_id=10003` | `business_outcome`, `NO_SHARE_SAVINGS` (outcome derived by the compiler) |
 | `recovery/` | `replay_20261007T192142Z_3321` | `--fault notice` | `success` after recovery `system_notice → dismiss` |
 | `recovery/` | `replay_20261007T192144Z_db18` | `--fault session_expired` | `success` after recovery `session_expired → reauthenticate` |
 | `hard_failure/` | `replay_20261007T192145Z_8be7` | `--fault denied` | `failed`, `PERMISSION_DENIED` (+ redacted DOM per frame) |
-| `human_handoff/` | *(to record)* | `--fault maint`, operator attached | unknown screen → escalation → human takes control of the same session → hand back → resync → `success`, with `handoffs[].human_actions` |
+| `human_handoff/` | `replay_20261007T200748Z_065f` | `member_id=10001 --fault maint`, operator attached | unknown "Maintenance Window" → `UNKNOWN_STATE` escalation → `operator` takes control of the same live session → Try Again (then re-runs the search by hand) → hand back → resync to the `click_search_button` checkpoint → resumes at `read_savings_balance` → `success`; every human click, fill (`«redacted:len=5»`) and navigation in `handoffs[0].human_actions` |
 
 Replays ran the committed `1.0.0` artifact against the local mock bank:
 
@@ -27,8 +28,9 @@ uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --sup
 ```
 
 `--supervised` because the artifact is still a draft; `--no-operator` so nothing waits for a human. The
-handoff run is the same command with `--input member_id=10001 --fault maint --evidence-dir evidence/human_handoff`
-and **without** `--no-operator`.
+handoff run used `make demo-handoff` (operator attached, headed browser) and was moved here from
+`evidence/_scratch/` unchanged, so the paths inside it say `_scratch`. While automation held control, the
+browser ignored human input (input lock); the human acted only after Take control.
 
 ## What is in each folder
 
@@ -40,10 +42,11 @@ and **without** `--no-operator`.
 - `artifact.json`: the compiled draft (same content as the catalog's `1.0.0.json`)
 - `selftest.json` + `replay_<run_id>/`: the compiler's self-test replay in a fresh browser context
 
-This run was recorded before the mock bank's teller-console restyle, so its screenshots show the earlier
-layout and mask colour, and the paths inside it say `evidence/_scratch/…` (where runs are written by
-default; it was moved here unchanged). Its `trace.json` also predates the removal of two unused trace
-fields (`id_attr`, `secret_name`, both always `null`). It is kept exactly as recorded.
+Both discovery runs were written to `evidence/_scratch/` (the default) and moved here unchanged, so the
+paths inside them say `evidence/_scratch/…`; `cua discover --evidence-dir evidence/discovery` now writes
+straight here. The 1.0.0 run was recorded before the mock bank's teller-console restyle (earlier layout
+and mask colour), and its `trace.json` predates the removal of two unused trace fields (`id_attr`,
+`secret_name`, always `null`). Both are kept exactly as recorded.
 
 **Replay** (`<kind>/replay_<run_id>/`):
 

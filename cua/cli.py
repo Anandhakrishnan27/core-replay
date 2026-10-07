@@ -82,13 +82,17 @@ def discover(
     fault: Annotated[str | None, typer.Option(help="Mock bank fault to inject during discovery")] = None,
     operator: OperatorFlag = None,
     operator_port: OperatorPort = 8001,
+    evidence_dir: Annotated[
+        Path | None,
+        typer.Option(help="Parent folder for this run's evidence (default: evidence/_scratch, git-ignored)"),
+    ] = None,
 ) -> None:
     """Real LLM-driven run → trace → compiled draft → self-test replay → catalog (only if it passed).
 
     Exit code: 0 saved, 1 discovery / compile / self-test failed, 2 refused before starting.
     """
     from cua.config import load_policy, load_tenant
-    from cua.discovery.agent import default_messages_api, default_model
+    from cua.discovery.agent import SCRATCH_RUNS, default_messages_api, default_model
     from cua.discovery.pipeline import Discovered, discover_capability
     from cua.handoff.operator import OperatorUnavailable
 
@@ -106,6 +110,7 @@ def discover(
                 headed=not headless,
                 fault=fault,
                 operator=op,
+                evidence_root=evidence_dir or SCRATCH_RUNS,
             )
 
     try:
