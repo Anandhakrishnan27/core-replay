@@ -1,7 +1,7 @@
 # CoreReplay: design notes
 
-Working notes for the build. Much of this becomes `REPORT.md`. Keep this file in sync with the code.
-When they disagree, the code and `CLAUDE.md` win, so fix this file.
+Working notes for the build; `REPORT.md` is the short write-up drawn from them. Keep this file in sync
+with the code. When they disagree, the code wins, so fix this file.
 
 ---
 
@@ -37,17 +37,33 @@ When they disagree, the code and `CLAUDE.md` win, so fix this file.
 
 **The main decision:** the LLM and replay act through the same `Surface` interface. Guardrails, redaction and evidence are enforced there, at one chokepoint, so neither path can bypass them. Surface is also the seam for legacy web and desktop apps.
 
+**Invariants** (every change must keep these):
+
+1. No LLM calls outside `cua/discovery/`. `cua/replay/` never imports `anthropic` (a test checks this).
+2. All browser interaction goes through `Surface`. The SessionProvider's login is the one exception, and it uses the same context.
+3. Policy is checked before every action, for both the LLM and replay (`PolicyGate.authorize`). The origin allowlist is also enforced at the network layer.
+4. No secrets or raw PII in artifacts, logs, screenshots or evidence. Artifact values are templates only; the logger redacts on write; screenshots mask (evidence screenshots may show tenant-approved partial values, never a full one).
+5. Credentials come only from env via the SessionProvider: never sent to the LLM, logged or committed.
+6. Business outcomes are not failures. Every terminal path returns one `RunResult` status: `success | business_outcome | failed | rejected`.
+7. Unknown state means never guess: snapshot, then escalate.
+8. No `sleep()`: wait on predicates with explicit timeouts; every retry is bounded.
+9. Async Playwright only.
+10. Handoff uses the same live browser session; `ensure_automation()` runs before every automated action.
+11. Requests that can't run are refused in pre-flight (`rejected`), before the UI is touched. Replay never escalates mid-transaction for an irreversible step.
+12. Page content is untrusted data. Irreversible actions during discovery always escalate to a human.
+
 ---
 
 ## 2. Repo layout
 
 ```
 core-replay/
-├── README.md  REPORT.md  DESIGN.md  CLAUDE.md
+├── README.md  REPORT.md  DESIGN.md
 ├── pyproject.toml  Makefile  .gitignore  .env.example
 ├── config/
 │   ├── policy.yaml               # allowed origins/actions, risk rules, redaction, limits
-│   └── tenants/cu_alpha.yaml, cu_beta.yaml   # base_url, product version, overrides
+│   ├── tenants/cu_alpha.yaml, cu_beta.yaml   # base_url, product version, overrides, masking
+│   └── products/mockbank.conditions.yaml     # product condition pack used by the compiler
 ├── mockbank/                     # TARGET APP: FastAPI, server-rendered, frameset, tables, no ids
 │   ├── app.py  data.py  faults.py
 │   └── templates/
@@ -94,12 +110,12 @@ class Surface(Protocol):
 
 ## 3. Artifact schema: why it's shaped this way
 
-The schema lives in `cua/schema/artifact.py`, and `capabilities/artifact.schema.json` is generated from it (`make schema`). The hand-written example `1.0.0.json` is a fixture for building replay first. After the first real discovery run it moves to `tests/fixtures/`, and `capabilities/` holds only generated artifacts.
+The schema lives in `cua/schema/artifact.py`, and `capabilities/artifact.schema.json` is generated from it (`make schema`). The hand-written example (`tests/fixtures/lookup_savings_balance.handwritten.json`) was the fixture replay was built against, and the target shape for the compiler. `capabilities/` holds only generated artifacts: today `mockbank/member.lookup_savings_balance/1.1.0.json`, from the real discovery run in `evidence/discovery/`.
 
 | Decision | Why |
 |---|---|
 | **Contract kept separate from implementation** (`contract` vs `targets` / `steps` / `conditions`) | A calling agent needs only inputs, outputs and outcomes, like a function signature. Implementation can change (new locators, a tenant override) without a contract change. |
-| **Outcomes are declared** (`SUCCESS`, `MEMBER_NOT_FOUND`, `NO_SAVINGS_ACCOUNT`) | Business outcomes are part of the API, not errors. |
+| **Outcomes are declared** (`SUCCESS`, `MEMBER_NOT_FOUND`, `NO_SHARE_SAVINGS`; the fixture calls the last one `NO_SAVINGS_ACCOUNT`) | Business outcomes are part of the API, not errors. |
 | **Targets defined once, steps refer to them by id** | Reviewers see each control once, with its rationale. Tenant overrides patch `targets.<id>` only. |
 | **Ranked locators, semantic first** (role → label → text / table_cell / near_text → css / xpath → coordinates) | What a human sees is stable in slow-changing enterprise UIs and exists on desktop too. The validator requires at least one semantic locator. |
 | **`MatchRule` on every target** | Finding *an* element isn't enough; it must be the *right* one (e.g. the balance cell must look like money). Silent wrong reads become loud failures. |
@@ -209,27 +225,31 @@ PAUSED | HUMAN ──abort() / timeout──► ABORTED → RunResult failed, ha
 
 ## 9. Build order (thin slice first)
 
-Build order is not runtime order. Replay is built first against the hand-written fixture, because it is the production path and defines the artifact contract the compiler must produce.
+Build order is not runtime order. Replay was built first against the hand-written fixture, because it is the production path and defines the artifact contract the compiler must produce.
 
-1. **Mock bank** (frameset, tables, faults, synthetic members)
-2. **Surface + SessionProvider + policy + evidence**
-3. **Replay executor** (enable `tests/test_replay_mockbank.py`)
-4. **Discovery + compiler**, then a real LLM run committed to `evidence/`
-5. **Handoff** (operator in-process, recorder, resync)
-6. **README / REPORT / evidence**
-7. Stretch, pick one: prompt-injection demo, replay stability (`--repeat N`), or capability catalog as tools
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Schema, config, policy gate, redaction, pre-flight, extract, overrides, handoff controller, catalog, CLI shell | done |
+| 1 | Mock bank (frameset, tables, faults, synthetic members) | done |
+| 2 | Surface + SessionProvider + network allowlist + evidence | done |
+| 3 | Replay executor (resolver, condition/checkpoint race) | done |
+| 4 | Discovery + compiler, then a real LLM run committed to `evidence/` | done (`1.1.0`) |
+| 5 | Handoff (operator in-process on :8001, recorder, resync, input lock) | done |
+| 6 | README, REPORT, curated evidence | done |
+
+Not built (stretch): prompt-injection demo, replay stability (`--repeat N`), capability catalog exposed as agent tools.
 
 **Demo commands** (also in the `Makefile`):
 
 ```
 make mockbank                                                              # :8000
-uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the savings balance"
-uv run cua validate capabilities/mockbank/member.lookup_savings_balance/1.0.0.json
-uv run cua approve mockbank.member.lookup_savings_balance --reviewer <you>
-uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10002   # success
-uv run cua replay ... --input member_id=99999                                # business_outcome MEMBER_NOT_FOUND
-uv run cua replay ... --input member_id=10001 --fault session_expired        # recovers via reauthenticate
-uv run cua replay ... --input member_id=10001 --fault maint                  # UNKNOWN_STATE → operator on :8001
+make demo-discover                     # real LLM run → saves 1.2.0 (1.1.0 exists; versions are immutable)
+uv run cua validate capabilities/mockbank/member.lookup_savings_balance/1.1.0.json
+uv run cua approve mockbank.member.lookup_savings_balance --reviewer <you>   # needed for unattended replay
+uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10002 --supervised   # success
+uv run cua replay ... --input member_id=99999 --supervised                   # business_outcome MEMBER_NOT_FOUND
+uv run cua replay ... --input member_id=10001 --fault session_expired --supervised   # recovers via reauthenticate
+uv run cua replay ... --input member_id=10001 --fault maint --supervised     # UNKNOWN_STATE → operator on :8001
 ```
 
 ---
@@ -246,7 +266,8 @@ Add a row each time you make a non-obvious decision. This feeds `REPORT.md` and 
 | | Irreversible steps gated in pre-flight, not mid-run | Escalate when reached | Never stop halfway through a transaction |
 | | Session expiry recoverable via SessionProvider (reauthenticate once) | Always escalate | Credentials never touch the LLM or artifact; one bounded retry is safe |
 | | Member id and balances classified `pii` | `internal` | Regulated financial data: conservative by default |
-| | Tenant overrides limited to `targets` / `conditions` | Free-form patches | The contract (API) must be identical for every tenant || 2026-10-06 | Mockbank faults are deterministic; `notice`, `session_expired`, `maint` fire once per browser context (`mb_once` cookie) | Random interstitials; server-side flags | Replay tests must not flake; a cookie scopes "once" to one Playwright context and survives re-login in it |
+| | Tenant overrides limited to `targets` / `conditions` | Free-form patches | The contract (API) must be identical for every tenant |
+| 2026-10-06 | Mockbank faults are deterministic; `notice`, `session_expired`, `maint` fire once per browser context (`mb_once` cookie) | Random interstitials; server-side flags | Replay tests must not flake; a cookie scopes "once" to one Playwright context and survives re-login in it |
 | 2026-10-06 | `session_expired` fires on opening the lookup form, not on the search POST | Expire on search | After reauthenticate, retrying the nav click works; retrying `submit_search` can't, because the form and the typed value are gone |
 | 2026-10-06 | `maint` fires once and offers "Try Again" | Always on | The human in the handoff demo needs a way to fix the screen so resync can succeed |
 | 2026-10-06 | Follow-up GETs (slow refresh, maint retry) carry an opaque single-use ticket, never the member number | Member number in the query string | No PII in URLs, so none in logs, history or evidence |
@@ -345,3 +366,4 @@ Add a row each time you make a non-obvious decision. This feeds `REPORT.md` and 
 | 2026-10-07 | `make demo-discover` saves `VERSION` (default `1.1.0`); the committed `1.0.0` stays the evidence-backed artifact | Delete `1.0.0` before each demo; overwrite | Saved versions are immutable, and reviewers without an API key still need a committed artifact to replay |
 | 2026-10-07 | `cua replay --evidence-dir` writes a run straight into `evidence/` for curation; the default stays `evidence/_scratch/` (git-ignored). The real discovery run was moved from `_scratch` unchanged | Copy scratch runs and rewrite their paths | Curated replays keep correct internal paths; recorded discovery evidence is never edited |
 | 2026-10-07 | Operator input lock (`cua/handoff/lock.py`): with an operator attached, every document blocks pointer and key input (capture phase on `window`) unless the state is HUMAN or automation has opened it for one action (`Surface.act`, re-login). New documents start locked and ask Python; answers are versioned so a stale "unlocked" is ignored. `SessionControl` notifies subscribers on each transition and the operator API awaits them (`flush`) before responding | Rely on the operator not touching the window; a blocking overlay element | Found on the demo: a click in the headed window while automation held control fixed the page during the race, so the run "succeeded" with an unrecorded human. Playwright clicks are trusted events too, so the lock cannot use `isTrusted`; an overlay element would break Playwright actionability checks. Now "who is in control" is enforced in the browser, not just in Python |
+| 2026-10-07 | `CLAUDE.md` removed from the repo; its invariants now live in §1 of this file | Keep the assistant brief alongside the design notes | One source of truth for the rules; the build phases it tracked are finished |
