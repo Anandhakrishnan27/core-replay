@@ -15,9 +15,9 @@ lint:             ## lint, format check, types
 schema:           ## regenerate capabilities/artifact.schema.json
 	uv run python scripts/export_schema.py
 
-# Saved versions are immutable and 1.0.0 (the committed discovery run) already exists: a new run saves
+# Saved versions are immutable and 1.1.0 (the committed discovery run) already exists: a new run saves
 # as VERSION. Override with `make demo-discover VERSION=1.2.0`.
-VERSION ?= 1.1.0
+VERSION ?= 1.2.0
 
 demo-discover:    ## real LLM discovery run (needs ANTHROPIC_API_KEY) → saves VERSION
 	uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the savings balance" \

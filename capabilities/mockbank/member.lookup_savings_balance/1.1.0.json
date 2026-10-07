@@ -1,9 +1,9 @@
 {
   "schema_version": "1.0",
   "id": "mockbank.member.lookup_savings_balance",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Look up member <member_id> and read the savings balance",
-  "description": "Look up member <member_id> and read the savings balance. Fills forms but commits nothing. Compiled from discovery run 20261007T042631Z_e4c4.",
+  "description": "Look up member <member_id> and read the savings balance. Fills forms but commits nothing. Compiled from discovery run 20261007T200029Z_e2dd.",
   "app": {
     "product": "mockbank_core",
     "version_range": ">=2.0,<3.0",
@@ -12,8 +12,7 @@
       "all_of": [
         {
           "kind": "text_present",
-          "text": "MockBank Core",
-          "within": null
+          "text": "MockBank Core"
         },
         {
           "kind": "target_visible",
@@ -32,8 +31,7 @@
         "description": "Typed into the 'Member Number' field.",
         "required": true,
         "sensitivity": "pii",
-        "pattern": "^[0-9]+$",
-        "example": null
+        "pattern": "^[0-9]+$"
       }
     ],
     "outputs": [
@@ -96,9 +94,7 @@
       ],
       "match": {
         "unique": true,
-        "visible": true,
-        "enabled": null,
-        "text_pattern": null
+        "visible": true
       },
       "sensitive": false,
       "rationale": "Verified unique on the live page during discovery; tried in order: accessible role + name (what an operator sees); its visible text; stable markup attributes (fallback)"
@@ -123,8 +119,7 @@
       "match": {
         "unique": true,
         "visible": true,
-        "enabled": true,
-        "text_pattern": null
+        "enabled": true
       },
       "sensitive": true,
       "rationale": "Verified unique on the live page during discovery; tried in order: the visible caption beside it (legacy form without <label for>); stable markup attributes (fallback)"
@@ -149,8 +144,7 @@
       "match": {
         "unique": true,
         "visible": true,
-        "enabled": true,
-        "text_pattern": null
+        "enabled": true
       },
       "sensitive": false,
       "rationale": "Verified unique on the live page during discovery; tried in order: accessible role + name (what an operator sees); stable markup attributes (fallback)"
@@ -171,8 +165,7 @@
       "match": {
         "unique": true,
         "visible": true,
-        "enabled": null,
-        "text_pattern": "^-?[$\u20ac\u00a3]?-?[0-9,]+\\.[0-9]{2}$"
+        "text_pattern": "^-?[$€£]?-?[0-9,]+\\.[0-9]{2}$"
       },
       "sensitive": true,
       "rationale": "Verified unique on the live page during discovery; tried in order: row label + column header (survives row and column reordering). Dropped 1 positional fallback(s): row position changes with the data. text_pattern guards against reading the wrong cell."
@@ -194,9 +187,7 @@
       "frame_path": [],
       "match": {
         "unique": true,
-        "visible": true,
-        "enabled": null,
-        "text_pattern": null
+        "visible": true
       },
       "sensitive": false,
       "rationale": "The interstitial can open in any frame, so no frame_path; OK is its only control."
@@ -211,8 +202,7 @@
         "any_of": [
           {
             "kind": "text_present",
-            "text": "No member found",
-            "within": null
+            "text": "No member found"
           }
         ],
         "timeout_ms": 1500
@@ -232,8 +222,7 @@
         "all_of": [
           {
             "kind": "text_present",
-            "text": "Member Summary",
-            "within": null
+            "text": "Member Summary"
           },
           {
             "kind": "target_absent",
@@ -259,8 +248,7 @@
         "any_of": [
           {
             "kind": "text_present",
-            "text": "System Notice",
-            "within": null
+            "text": "System Notice"
           }
         ],
         "timeout_ms": 500
@@ -280,8 +268,7 @@
         "any_of": [
           {
             "kind": "text_present",
-            "text": "Processing, please wait",
-            "within": null
+            "text": "Processing, please wait"
           }
         ],
         "timeout_ms": 500
@@ -305,8 +292,7 @@
           },
           {
             "kind": "text_present",
-            "text": "Your session has expired",
-            "within": null
+            "text": "Your session has expired"
           }
         ],
         "timeout_ms": 500
@@ -325,8 +311,7 @@
         "any_of": [
           {
             "kind": "text_present",
-            "text": "You are not authorized",
-            "within": null
+            "text": "You are not authorized"
           }
         ],
         "timeout_ms": 500
@@ -345,8 +330,7 @@
         "any_of": [
           {
             "kind": "text_present",
-            "text": "An unexpected error has occurred",
-            "within": null
+            "text": "An unexpected error has occurred"
           }
         ],
         "timeout_ms": 500
@@ -367,7 +351,6 @@
         "url": "{{tenant.base_url}}/console"
       },
       "risk": "read",
-      "expect": null,
       "timeout_ms": 10000
     },
     {
@@ -383,6 +366,10 @@
           {
             "kind": "target_visible",
             "target": "member_number_field"
+          },
+          {
+            "kind": "text_present",
+            "text": "Find a Member"
           }
         ],
         "any_of": [],
@@ -399,7 +386,6 @@
         "value": "{{inputs.member_id}}"
       },
       "risk": "reversible",
-      "expect": null,
       "timeout_ms": 10000
     },
     {
@@ -418,8 +404,7 @@
           },
           {
             "kind": "text_present",
-            "text": "Member Summary",
-            "within": null
+            "text": "Member Summary"
           }
         ],
         "any_of": [],
@@ -437,7 +422,6 @@
         "parse": "currency"
       },
       "risk": "read",
-      "expect": null,
       "timeout_ms": 10000
     }
   ],
@@ -449,24 +433,21 @@
       },
       {
         "kind": "text_present",
-        "text": "Member Summary",
-        "within": null
+        "text": "Member Summary"
       }
     ],
     "any_of": [],
     "timeout_ms": 10000
   },
   "provenance": {
-    "discovery_run_id": "20261007T042631Z_e4c4",
+    "discovery_run_id": "20261007T200029Z_e2dd",
     "model": "claude-opus-5-5",
-    "recorded_at": "2026-10-07T04:26:31.616407Z",
+    "recorded_at": "2026-10-07T20:00:29.595965Z",
     "compiler_version": "0.1.0",
     "human_assisted_steps": []
   },
   "review": {
     "status": "draft",
-    "reviewed_by": null,
-    "reviewed_at": null,
     "notes": "Compiled automatically. Before approving, check: locators and their order, checkpoint texts, condition texts and outcome codes, input pattern, and output sensitivity."
   }
 }
