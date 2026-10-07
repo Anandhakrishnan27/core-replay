@@ -46,6 +46,8 @@ The Python package and CLI are called `cua` (computer-use automation).
 Requirements: Python 3.11+ and [uv](https://docs.astral.sh/uv/). The commands below are for macOS or Linux.
 
 ```bash
+git clone https://github.com/Anandhakrishnan27/core-replay.git
+cd core-replay
 make setup                 # uv sync + playwright install chromium
 ```
 
