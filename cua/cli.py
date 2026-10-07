@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from dotenv import load_dotenv
@@ -14,12 +16,49 @@ from pydantic import ValidationError
 
 from cua import catalog
 
+if TYPE_CHECKING:
+    from cua.handoff.operator import OperatorServer
+
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 load_dotenv()
 # Demo-only defaults for the synthetic mock bank (must match mockbank/app.py). Env and .env win.
 # Real deployments set credentials in the environment; the SessionProvider still reads only env.
 os.environ.setdefault("MOCKBANK_USER", "teller01")
 os.environ.setdefault("MOCKBANK_PASSWORD", "mockbank-demo")
+
+
+OperatorFlag = Annotated[
+    bool | None,
+    typer.Option(
+        "--operator/--no-operator",
+        help="Serve the operator page so a human can take over on escalation "
+        "(default: on for discover and --supervised replay, off for unattended replay)",
+    ),
+]
+OperatorPort = Annotated[int, typer.Option(help="Operator page port (127.0.0.1 only)")]
+Headless = Annotated[
+    bool, typer.Option(envvar="CUA_HEADLESS", help="Hide the browser (a human can then not take over)")
+]
+
+
+@asynccontextmanager
+async def _operator(attach: bool, port: int) -> AsyncIterator[OperatorServer | None]:
+    """The in-process operator page for this run, or None. Its URL (with the per-run token) is printed
+    to the terminal only: never logged, never in evidence."""
+    if not attach:
+        yield None
+        return
+    from cua.handoff.operator import operator_server
+
+    async with operator_server(port=port) as op:
+        typer.secho(f"operator page: {op.url}", fg="cyan", err=True)
+        typer.secho("  (escalations wait here for a human; the token is this run's only)", err=True)
+        yield op
+
+
+def _operator_unavailable(e: Exception) -> None:
+    typer.secho(f"refused  {e}", fg="yellow", err=True)
+    raise typer.Exit(2)
 
 
 def _parse_inputs(pairs: list[str]) -> dict[str, str]:
@@ -44,8 +83,10 @@ def discover(
     ] = [],  # noqa: B006
     tenant: Annotated[str, typer.Option(help="Tenant id from config/tenants")] = "cu_alpha",
     version: Annotated[str, typer.Option(help="Semver of the new artifact")] = "1.0.0",
-    headless: Annotated[bool, typer.Option(envvar="CUA_HEADLESS", help="Hide the browser")] = False,
+    headless: Headless = False,
     fault: Annotated[str | None, typer.Option(help="Mock bank fault to inject during discovery")] = None,
+    operator: OperatorFlag = None,
+    operator_port: OperatorPort = 8001,
 ) -> None:
     """Real LLM-driven run → trace → compiled draft → self-test replay → catalog (only if it passed).
 
@@ -53,22 +94,29 @@ def discover(
     """
     from cua.config import load_policy, load_tenant
     from cua.discovery.agent import default_messages_api, default_model
-    from cua.discovery.pipeline import discover_capability
+    from cua.discovery.pipeline import Discovered, discover_capability
+    from cua.handoff.operator import OperatorUnavailable
 
-    result = asyncio.run(
-        discover_capability(
-            goal,
-            load_tenant(tenant),
-            load_policy(),
-            _parse_inputs(param),
-            capability_id,
-            version,
-            messages_api=default_messages_api(),
-            model=default_model(),
-            headed=not headless,
-            fault=fault,
-        )
-    )
+    async def run() -> Discovered:
+        async with _operator(operator is not False, operator_port) as op:
+            return await discover_capability(
+                goal,
+                load_tenant(tenant),
+                load_policy(),
+                _parse_inputs(param),
+                capability_id,
+                version,
+                messages_api=default_messages_api(),
+                model=default_model(),
+                headed=not headless,
+                fault=fault,
+                operator=op,
+            )
+
+    try:
+        result = asyncio.run(run())
+    except OperatorUnavailable as e:
+        _operator_unavailable(e)
     typer.echo(json.dumps(result.summary(), indent=2))
     color = {"saved": "green", "refused": "yellow"}.get(result.status, "red")
     typer.secho(f"{result.status}  {result.reason}", fg=color, err=True)
@@ -112,28 +160,40 @@ def replay(
     supervised: Annotated[bool, typer.Option(help="Allow draft artifacts; human may be pulled in")] = False,
     confirm: Annotated[bool, typer.Option(help="Confirm irreversible capability")] = False,
     fault: Annotated[str | None, typer.Option(help="Mock bank fault to inject")] = None,
+    operator: OperatorFlag = None,
+    operator_port: OperatorPort = 8001,
+    headless: Headless = False,
 ) -> None:
     """Deterministic replay (no LLM). Prints the RunResult JSON.
 
+    With an operator (--supervised, or --operator) an escalation waits up to the policy's handoff timeout
+    for a human in the same (headed) browser; without one it ends the run at once.
     Exit code: 0 success or business outcome (not an error), 1 failed, 2 rejected.
     """
+    from cua.handoff.operator import OperatorUnavailable
     from cua.replay.executor import replay as run_replay
-    from cua.schema.result import RunStatus
+    from cua.schema.result import RunResult, RunStatus
 
-    result = asyncio.run(
-        run_replay(
-            capability_id,
-            tenant,
-            _parse_inputs(input),
-            version=version,
-            mode="supervised" if supervised else "unattended",
-            confirmed=confirm,
-            fault=fault,
-            # TODO(phase-5): start the operator on :8001 and use policy.limits.handoff_timeout_s.
-            # Until then no operator is attached, so an escalation ends at once as `timed_out`.
-            handoff_timeout_s=0,
-        )
-    )
+    attach = supervised if operator is None else operator
+
+    async def run() -> RunResult:
+        async with _operator(attach, operator_port) as op:
+            return await run_replay(
+                capability_id,
+                tenant,
+                _parse_inputs(input),
+                version=version,
+                mode="supervised" if supervised else "unattended",
+                confirmed=confirm,
+                fault=fault,
+                operator=op,
+                headed=op is not None and not headless,  # the human uses this very window
+            )
+
+    try:
+        result = asyncio.run(run())
+    except OperatorUnavailable as e:
+        _operator_unavailable(e)
     typer.echo(json.dumps(result.model_dump(mode="json"), indent=2))
     detail = result.outcome_code or (result.failure.category.value if result.failure else "")
     color = {

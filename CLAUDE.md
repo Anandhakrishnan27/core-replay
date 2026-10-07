@@ -23,8 +23,8 @@ Build order differs from runtime order on purpose. Replay is built before discov
 | 2 | `cua/surface/`, `cua/session/`, network allowlist, evidence screenshots | ✅ done + tested |
 | 3 | `cua/replay/` resolver, checks (race), executor; enable `tests/test_replay_mockbank.py` | ✅ done + tested |
 | 4 | `cua/discovery/` + `cua/compiler/`; one real LLM run committed to `evidence/` | ✅ done + tested (real run saved `1.0.0`; curated evidence copy pending) |
-| 5 | Handoff wiring: operator in-process on :8001, recorder, resync | ⏳ next |
-| 6 | README, REPORT, curated evidence | todo |
+| 5 | Handoff wiring: operator in-process on :8001, recorder, resync | ✅ done + tested |
+| 6 | README, REPORT, curated evidence | ⏳ next |
 
 - Unimplemented code is marked `TODO(phase-N)`. Its docstrings describe the intended algorithm: follow them.
 - **Only implement the phase you are asked for.** Don't build ahead.
@@ -57,7 +57,10 @@ uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the 
 # discovery → compile → self-test replay → save; exit 0 saved, 1 failed, 2 refused (bad id / version exists)
 # discover on the HAPPY path (a member with savings); other inputs and outcomes are replay's job
 uv run cua replay <capability_id> --tenant cu_alpha --input member_id=10002 [--fault <name>] [--supervised] [--confirm]
-# operator page (:8001) starts in-process with each run, see cua/handoff/operator.py
+# operator page: served in-process on 127.0.0.1:8001 (--operator-port) for `cua discover` and
+# `cua replay --supervised` (override with --operator / --no-operator); the printed URL carries a per-run
+# token (CSRF protection, not auth). Attached → headed browser, escalations wait limits.handoff_timeout_s.
+# Unattended replay has no operator: an escalation fails at once ("no operator available").
 ```
 
 ## Layout
@@ -132,7 +135,7 @@ tests/
   | `session_expired` | success (reauthenticated once) |
   | `denied` | failed `PERMISSION_DENIED` |
   | `error` | failed `APP_ERROR` |
-  | `maint` | failed `UNKNOWN_STATE` (escalated) |
+  | `maint` | failed `UNKNOWN_STATE` (escalated; no operator) — with an operator: human clicks Try Again → resync → success |
 
 - Every new condition or failure path needs a test asserting `status`, `outcome_code` or `failure.category`.
 - Don't unit-test the LLM. The committed discovery run in `/evidence/` is the proof.

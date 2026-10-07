@@ -43,12 +43,20 @@ make mockbank              # terminal 1: target app on http://localhost:8000
 make demo-discover         # terminal 2: real LLM run → capabilities/.../x.y.z.json (draft)
 make demo-replay           # replay with a NEW member id → success (--supervised: artifact is still a draft)
 make demo-notfound         # → business_outcome MEMBER_NOT_FOUND
-make demo-handoff          # → escalation; open http://localhost:8001, take control, hand back
+make demo-handoff          # → escalation; open the printed operator URL, take control,
+                           #   click "Try Again" in the Chromium window, hand back → success
 ```
 
 The demo targets run `--supervised` for now, so draft artifacts may replay. Don't run `cua approve` on the
 hand-written fixture (`capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`): it rewrites the file.
 Approval for unattended replay comes back after Phase 4, on the generated artifact.
+
+**Operator page:** `cua replay --supervised` (or `--operator`) and `cua discover` serve it on
+`127.0.0.1:8001` (`--operator-port`) for the length of the run and print its URL, e.g.
+`http://127.0.0.1:8001/?token=…`. The token is random per run and required on every route (403
+otherwise): CSRF protection, so another web page open in your browser cannot drive the API. It is not
+authentication (see REPORT.md, Cuts). With an operator attached the browser is headed and an escalation
+waits up to `limits.handoff_timeout_s` (900 s); unattended replays (no operator) fail at once.
 
 **Running without live services:** replay needs no API key. A committed artifact plus the local mock bank are enough. `make test` runs everything offline.
 

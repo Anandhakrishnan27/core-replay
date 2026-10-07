@@ -28,6 +28,10 @@
      same live session; human action capture (redacted); resync to furthest satisfied checkpoint;
      abort/timeout. What is real vs mocked (operator UI, remote streaming). -->
 
+- **Operator access:** the operator page runs in-process on `127.0.0.1` only, with a random token per run
+  in the printed URL, required on every API route (403 otherwise). This is CSRF protection (another page
+  in the operator's browser cannot drive the API), not authentication.
+
 ## 6. Safety
 <!-- Network-level allowlist; action allowlist; risk classes and handling (and why);
      credentials via session provider, never seen by LLM; redaction of logs/screenshots/artifacts;
@@ -35,3 +39,12 @@
 
 ## 7. Cuts
 <!-- What was deliberately left out or mocked, and why. What you would build next. -->
+
+- **Operator authentication and authorization.** The per-run token stops CSRF but does not identify
+  anyone: whoever holds the URL can take control, and `operator_id` is self-declared. A real deployment
+  needs SSO, per-operator roles, and an audit trail bound to the authenticated identity.
+- **Resync checks the screen, not the data.** Checkpoints never assert data values, so after a handoff
+  replay cannot tell whether the human looked up a different member. The redacted `human_actions` in the
+  result are the audit trail; a real system would bind the session to the request's inputs.
+- **Remote viewing.** The human uses the headed Chromium window on the same machine; a real system would
+  stream it (CDP screencast or noVNC).

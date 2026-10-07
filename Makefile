@@ -25,5 +25,7 @@ demo-replay:      ## deterministic replay, success
 demo-notfound:    ## replay -> business outcome
 	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=99999 --supervised
 
-demo-handoff:     ## replay -> escalation -> operator page on :8001 -> resume
+demo-handoff:     ## replay -> escalation -> operator page on :8001 -> human fixes -> resync -> success
+	@echo "Open the printed operator URL (it carries this run's token). When the run pauses:"
+	@echo "  Take control -> click 'Try Again' in the Chromium window -> Hand back."
 	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10001 --fault maint --supervised

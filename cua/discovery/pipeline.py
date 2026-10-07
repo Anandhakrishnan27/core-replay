@@ -26,6 +26,7 @@ from cua.compiler.selftest import self_test
 from cua.config import CAPABILITIES_DIR, ROOT, Policy, Tenant
 from cua.discovery.agent import DEFAULT_MODEL, SCRATCH_RUNS, MessagesAPI, discover
 from cua.evidence.logger import RunLogger
+from cua.handoff.operator import OperatorServer
 
 Status = Literal["saved", "refused", "discovery_failed", "compile_failed", "selftest_failed"]
 _CAPABILITY_ID = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
@@ -63,6 +64,7 @@ async def discover_capability(
     headed: bool = False,
     fault: str | None = None,
     browser: Browser | None = None,
+    operator: OperatorServer | None = None,
     catalog_root: Path = CAPABILITIES_DIR,
     evidence_root: Path = SCRATCH_RUNS,
 ) -> Discovered:
@@ -83,6 +85,7 @@ async def discover_capability(
         headed=headed,
         fault=fault,
         browser=browser,
+        operator=operator,  # the self-test below never gets one: it must pass without a human
         evidence_root=evidence_root,
     )
     evidence = run.evidence_dir
