@@ -35,13 +35,44 @@ def _parse_inputs(pairs: list[str]) -> dict[str, str]:
 @app.command()
 def discover(
     goal: Annotated[str, typer.Option(help="Natural-language goal")],
+    capability_id: Annotated[
+        str, typer.Option(help="Id for the compiled artifact: <product>.<domain>.<verb_noun>")
+    ],
+    param: Annotated[
+        list[str],
+        typer.Option("--param", "-p", help="name=value for each value the goal mentions; repeatable"),
+    ] = [],  # noqa: B006
     tenant: Annotated[str, typer.Option(help="Tenant id from config/tenants")] = "cu_alpha",
-    capability_id: Annotated[str | None, typer.Option(help="Id for the compiled artifact")] = None,
+    version: Annotated[str, typer.Option(help="Semver of the new artifact")] = "1.0.0",
+    headless: Annotated[bool, typer.Option(envvar="CUA_HEADLESS", help="Hide the browser")] = False,
+    fault: Annotated[str | None, typer.Option(help="Mock bank fault to inject during discovery")] = None,
 ) -> None:
-    """Real LLM-driven run against the live app → trace → compiled draft artifact."""
-    from cua.discovery.agent import run_discovery
+    """Real LLM-driven run → trace → compiled draft → self-test replay → catalog (only if it passed).
 
-    asyncio.run(run_discovery(goal, tenant))
+    Exit code: 0 saved, 1 discovery / compile / self-test failed, 2 refused before starting.
+    """
+    from cua.config import load_policy, load_tenant
+    from cua.discovery.agent import default_messages_api, default_model
+    from cua.discovery.pipeline import discover_capability
+
+    result = asyncio.run(
+        discover_capability(
+            goal,
+            load_tenant(tenant),
+            load_policy(),
+            _parse_inputs(param),
+            capability_id,
+            version,
+            messages_api=default_messages_api(),
+            model=default_model(),
+            headed=not headless,
+            fault=fault,
+        )
+    )
+    typer.echo(json.dumps(result.summary(), indent=2))
+    color = {"saved": "green", "refused": "yellow"}.get(result.status, "red")
+    typer.secho(f"{result.status}  {result.reason}", fg=color, err=True)
+    raise typer.Exit({"saved": 0, "refused": 2}.get(result.status, 1))
 
 
 @app.command()

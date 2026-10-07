@@ -16,7 +16,8 @@ schema:           ## regenerate capabilities/artifact.schema.json
 	uv run python scripts/export_schema.py
 
 demo-discover:    ## real LLM discovery run (needs ANTHROPIC_API_KEY)
-	uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the savings balance"
+	uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the savings balance" \
+	  --capability-id mockbank.member.lookup_savings_balance --param member_id=10001
 
 demo-replay:      ## deterministic replay, success
 	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10002 --supervised

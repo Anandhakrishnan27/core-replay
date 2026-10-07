@@ -40,7 +40,7 @@ from playwright.async_api import Browser
 from playwright.async_api import Error as PlaywrightError
 
 from cua.compiler.locators import candidates
-from cua.config import EVIDENCE_DIR, Policy, Tenant, load_policy, load_tenant
+from cua.config import EVIDENCE_DIR, Policy, Tenant
 from cua.discovery.prompts import SYSTEM_PROMPT, user_turn
 from cua.discovery.recorder import TRACE_FILE, TraceRecorder
 from cua.discovery.stuck import StuckDetector
@@ -134,25 +134,9 @@ def _new_run_id() -> str:
 # --------------------------------------------------------------------------- #
 
 
-async def run_discovery(
-    goal: str,
-    tenant_id: str,
-    params: dict[str, str] | None = None,
-    *,
-    headless: bool = False,
-    fault: str | None = None,
-) -> DiscoveryResult:
-    """CLI entry: load config, then discover() with the real Anthropic client."""
-    return await discover(
-        goal,
-        load_tenant(tenant_id),
-        load_policy(),
-        params or {},
-        messages_api=anthropic.AsyncAnthropic().beta.messages,
-        model=default_model(),
-        headed=not headless,
-        fault=fault,
-    )
+def default_messages_api() -> MessagesAPI:
+    """The real model client (credentials resolved by the SDK from the environment)."""
+    return anthropic.AsyncAnthropic().beta.messages
 
 
 async def discover(
