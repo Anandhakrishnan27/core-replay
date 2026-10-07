@@ -1,12 +1,114 @@
 <!doctype html>
-<html>
-<head><meta charset="utf-8"><title>CUA Operator</title>
-<style>body{font-family:system-ui;margin:24px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px 10px}</style>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CUA Operator</title>
+<style>
+  :root { --fg:#1d2433; --muted:#5b6475; --line:#d9dde5; --bg:#f6f7f9; --card:#fff; --accent:#0b5cad; --warn:#9a5b00; --bad:#a3262a; --ok:#1d7a3a; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--fg); background: var(--bg); margin: 0; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; max-width: 1100px; }
+  .head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .state { font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: 12px; }
+  .AUTOMATION { color: var(--ok); } .PAUSED { color: var(--warn); } .HUMAN { color: var(--accent); }
+  .RESUMING { color: var(--muted); } .ABORTED { color: var(--bad); }
+  .grid { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(260px, 420px); gap: 16px; }
+  dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+  dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+  img { width: 100%; border: 1px solid var(--line); border-radius: 4px; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.danger { color: var(--bad); border-color: var(--bad); }
+  button:disabled { opacity: .45; cursor: default; }
+  .hint { color: var(--accent); font-weight: 600; margin-top: 8px; }
+  ol { margin: 8px 0 0; padding-left: 20px; } .empty { color: var(--muted); }
+  .error { color: var(--bad); }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } body { padding: 16px; } }
+</style>
 </head>
 <body>
-<h1>Interventions</h1>
-<!-- TODO(phase-5): poll /api/interventions every 2s; show goal/step/reason/expected state/masked screenshot;
-     buttons: Take control → Hand back / Abort (POST /api/runs/{run_id}/...). -->
-<table id="list"><tr><th>Run</th><th>State</th><th>Holder</th><th>Reason</th><th>Actions</th></tr></table>
+<h1>CUA Operator</h1>
+<p class="sub">Runs waiting for a human. Take control, fix the screen in the browser window that automation is using, then hand back.</p>
+<div id="error" class="error"></div>
+<div id="runs"><p class="empty">Loading…</p></div>
+
+<script>
+// Every request carries the per-run token from this page's own URL (CSRF protection).
+const TOKEN = new URLSearchParams(location.search).get("token") || "";
+const H = { "X-Operator-Token": TOKEN };
+
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const c of children) e.append(c instanceof Node ? c : document.createTextNode(c ?? ""));  // text only: no innerHTML
+  return e;
+}
+
+async function post(runId, op) {
+  let url = `/api/runs/${encodeURIComponent(runId)}/${op}`;
+  if (op === "take-control") {
+    const who = prompt("Your operator id (letters, digits, . _ @ -)", "operator");
+    if (!who) return;
+    url += `?operator_id=${encodeURIComponent(who)}`;
+  }
+  const r = await fetch(url, { method: "POST", headers: H });
+  document.getElementById("error").textContent = r.ok ? "" : `${op}: ${(await r.json()).detail}`;
+  refresh();
+}
+
+function row(dl, label, value) { if (value) dl.append(el("dt", {}, label), el("dd", {}, String(value))); }
+
+async function render(run) {
+  const req = run.request || {};
+  const dl = el("dl");
+  row(dl, "Mode", run.mode);
+  row(dl, run.mode === "replay" ? "Capability" : "Goal", run.mode === "replay" ? req.capability_id : req.goal);
+  row(dl, "Step", req.step_id ? `${req.step_id}: ${req.step_intent || ""}` : "");
+  row(dl, "Reason", req.reason);
+  row(dl, "Category", req.category);
+  row(dl, "Expected state", req.expected_state);
+  row(dl, "URL", req.current_url);
+  row(dl, "Holder", run.holder);
+
+  const s = run.state;
+  const buttons = el("div", { class: "actions" },
+    el("button", { class: "primary", onclick: () => post(run.run_id, "take-control"), ...(s === "PAUSED" ? {} : { disabled: "" }) }, "Take control"),
+    el("button", { onclick: () => post(run.run_id, "hand-back"), ...(s === "HUMAN" ? {} : { disabled: "" }) }, "Hand back"),
+    el("button", { class: "danger", onclick: () => post(run.run_id, "abort"), ...(s === "PAUSED" || s === "HUMAN" ? {} : { disabled: "" }) }, "Abort"));
+
+  const left = el("div", {}, dl, buttons);
+  if (s === "HUMAN") left.append(el("p", { class: "hint" }, "You have control: fix the screen in the browser window, then press Hand back."));
+
+  const acts = await (await fetch(`/api/runs/${encodeURIComponent(run.run_id)}/actions`, { headers: H })).json();
+  const list = acts.length ? el("ol", {}, ...acts.map(a => el("li", {}, `${a.kind} ${a.target_hint}${a.value ? " " + a.value : ""}`)))
+                           : el("p", { class: "empty" }, "No human actions yet.");
+  left.append(el("h3", {}, "Human actions (redacted)"), list);
+
+  const right = el("div");
+  if (req.screenshot) right.append(el("img", { alt: "Masked screenshot at escalation", src: `/api/runs/${encodeURIComponent(run.run_id)}/screenshot?token=${encodeURIComponent(TOKEN)}&e=${run.epoch}` }));
+
+  return el("section", { class: "card" },
+    el("div", { class: "head" }, el("strong", {}, run.run_id), el("span", { class: `state ${s}` }, s)),
+    el("div", { class: "grid" }, left, right));
+}
+
+async function refresh() {
+  try {
+    const r = await fetch("/api/interventions", { headers: H });
+    if (!r.ok) { document.getElementById("error").textContent = "Access denied: open the operator URL printed by the run (it carries the token)."; return; }
+    const runs = await r.json();
+    const box = document.getElementById("runs");
+    box.replaceChildren(...(runs.length ? await Promise.all(runs.map(render)) : [el("p", { class: "empty" }, "No live runs.")]));
+  } catch (e) { document.getElementById("error").textContent = "Operator API unreachable (did the run finish?)"; }
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
 </body>
 </html>
