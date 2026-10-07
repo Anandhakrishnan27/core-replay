@@ -56,20 +56,25 @@ Then create a `.env` file in the repo root (it is git-ignored). Both the `cua` C
 ```bash
 # Any values: the mock bank accepts exactly these credentials
 MOCKBANK_USER=teller
-MOCKBANK_PASSWORD=change-me
+MOCKBANK_PASSWORD=tellerdemo
 # A long random string
 CUA_REDACTION_SALT=replace-with-a-long-random-string
 # Discovery only
 ANTHROPIC_API_KEY=your-key
+# Optional
+# CUA_MODEL=claude-opus-5-5
+# CUA_HEADLESS=1
+# MOCKBANK_FAULT=notice
 ```
 
 | Variable | Needed for | Notes |
 | --- | --- | --- |
 | `MOCKBANK_USER`, `MOCKBANK_PASSWORD` | every run | Choose any values; there is no default. The mock bank accepts exactly these, and the session provider signs in with them. Never logged and never sent to the LLM. |
-| `CUA_REDACTION_SALT` | every run | Salt for hashing PII in logs and evidence. Set a long random value. |
+| `CUA_REDACTION_SALT` | every run | Salt for hashing PII in logs and evidence. Set a long random value; if unset, a fixed dev-only salt is used. |
 | `ANTHROPIC_API_KEY` | discovery only | Replay never calls an LLM. |
 | `CUA_MODEL` | discovery, optional | Defaults to `claude-opus-5-5`. |
 | `CUA_HEADLESS` | optional | Hides the browser. A human can only take over a visible one. |
+| `MOCKBANK_FAULT` | MockBank, optional | Default fault for every request (same names as `--fault`, see [Runtime faults](#runtime-faults)). Leave unset for the demos. |
 
 ## Demo
 
@@ -88,12 +93,27 @@ make demo-notfound         # member 99999 → business_outcome MEMBER_NOT_FOUND 
 make demo-handoff          # injected "Maintenance Window" → escalation → human takeover → success
 ```
 
+Without make, the first three are:
+
+```bash
+uv run cua discover --goal "look up member 10001 and read the savings balance" \
+  --capability-id mockbank.member.lookup_savings_balance --param member_id=10001 --version 1.2.0
+uv run cua replay mockbank.member.lookup_savings_balance --version 1.2.0 --input member_id=10002 --supervised
+uv run cua replay mockbank.member.lookup_savings_balance --version 1.2.0 --input member_id=99999 --supervised
+```
+
+**Cost and time.** `make demo-discover` makes real Anthropic API calls, billed to your key. The recorded
+run took about 20 seconds including its self-test replay, and discovery is capped at 300 s
+(`discovery_timeout_s` in `config/policy.yaml`). Replay and `make test` make no API calls; a replay
+takes a few seconds.
+
 **No API key?** Skip `demo-discover`. The replay demos run the newest artifact in the catalog: the
 committed `1.1.0`, from a real discovery run, until you discover a newer one. Replay never needs a key.
 Saved versions are immutable, so `demo-discover` saves a new version (`1.2.0` by default; pass
 `VERSION=x.y.z` for another run).
 
-**The handoff demo**, step by step:
+**The handoff demo**, step by step. It needs a visible browser, so run it on a machine with a display
+(not over SSH or in a container), and do not set `CUA_HEADLESS`.
 
 1. Run `make demo-handoff` and open the operator URL it prints (`http://127.0.0.1:8001/?token=…`).
 2. A Chromium window opens and reaches a *Maintenance Window* page, which no artifact knows.
@@ -154,6 +174,19 @@ Add `--fault <name>` to `cua replay` (or `cua discover`) to make MockBank misbeh
 - **`make test` runs the whole suite offline:** MockBank is started in-process, the LLM is stubbed, and a local Chromium is used. It takes about 4 minutes.
 - **Discovery is the only step that calls a model.** Its real runs are recorded in [`evidence/discovery/`](evidence/discovery/).
 
+## Troubleshooting
+
+- **MockBank is not running.** Replay ends `failed  SESSION_EXPIRED` with `failure.observed` set to
+  `sign-on did not reach the console`; discovery ends `failed  login failed: sign-on did not reach the
+  console`. Start `make mockbank` in another terminal and check that `http://localhost:8000` loads.
+- **Missing `.env` values.** Without `MOCKBANK_USER` / `MOCKBANK_PASSWORD`, the same failure reads
+  `set MOCKBANK_USER / MOCKBANK_PASSWORD`. MockBank reads `.env` only at startup, so if you created or
+  changed it after `make mockbank`, restart MockBank, or every sign-on is refused with
+  `sign-on did not reach the console`. Without `ANTHROPIC_API_KEY`, discovery ends
+  `failed  no Anthropic credentials: set ANTHROPIC_API_KEY (e.g. in .env) …`.
+- **Chromium is not installed.** The run stops with a Playwright error, `Executable doesn't exist at …`.
+  Re-run `make setup`.
+
 ## Evidence
 
 [`evidence/`](evidence/) holds curated runs, grouped by kind. Each run folder has a `run.jsonl` event log,
@@ -170,8 +203,8 @@ have `trace.json`, the compiled `artifact.json` and the self-test. See
 | `hard_failure/` | `PERMISSION_DENIED`, with redacted DOM per frame |
 | `human_handoff/` | A real human takeover of the live session, then resync → `success` |
 
-No raw member numbers, names, SSNs, balances or account numbers appear in any log, result or DOM dump.
-Screenshots mask PII, with bank-style partial values in evidence only (e.g. SSN `•••-••-7731`).
+All data is synthetic. Logs, result files and DOM dumps contain no raw PII. Screenshots mask PII but may
+show bank-style partial values (for example SSN `•••-••-7731`).
 
 ## Project layout
 
@@ -191,10 +224,9 @@ mockbank/              the target app (FastAPI + Jinja2, legacy on purpose) and 
 capabilities/          the catalog: <product>/<capability>/<semver>.json, plus the generated artifact.schema.json
 config/                policy.yaml, tenants/*.yaml, products/*.conditions.yaml (vendor condition packs)
 evidence/              curated runs (see above)
+scripts/               export_schema.py (used by `make schema`)
 tests/                 unit and end-to-end tests against MockBank
 ```
-
-[`DESIGN.md`](DESIGN.md) holds the working design notes and a dated log of every non-obvious decision.
 
 ## Development
 
