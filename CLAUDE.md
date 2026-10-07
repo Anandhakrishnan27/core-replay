@@ -98,7 +98,7 @@ tests/
 4. **No secrets or raw PII in artifacts, logs, screenshots or evidence.**
    - Artifact `fill` / `navigate` values are templates only: `{{inputs.x}}`, `{{tenant.x}}`, `{{secrets.x}}`.
    - The logger redacts on write: PII is a salted hash, secrets become `«secret:name»`, human-typed values become `«redacted:len=n»`.
-   - Screenshots mask targets marked `sensitive` plus the tenant's `mask_selectors`, fully or, in evidence screenshots only, partially per the tenant's `screenshot_reveal` rules (e.g. `•••-••-7731`). Never a full value. DOM dumps, logs and LLM input stay fully masked.
+   - Screenshots mask targets marked `sensitive` plus the tenant's `mask_selectors`, fully or, in evidence screenshots only, partially per the tenant's `screenshot_reveal` rules (e.g. `•••-••-7731`). Never a full value. Every leaf showing a digit is masked too, except reviewed chrome in the tenant's `unmask_selectors`. DOM dumps, logs and LLM input stay fully masked.
    - Playwright traces are opt-in, written only to `evidence/_scratch/`, never committed.
    - Error messages never echo input values.
 5. **Credentials come only from env via the SessionProvider.** They are never sent to the LLM, never logged, never committed. Never read or modify `.env`.
@@ -153,7 +153,7 @@ tests/
   - 10002: savings in a different row position
   - 10003: no savings account
   - any other id: not found
-- Summary detail values sit in `<td class="cap">Label</td><td>value</td>` pairs. Tenant `mask_selectors` are `td.cap + td` and `td.acctno` in **both** tenant configs (a test asserts they match); screenshots and DOM dumps rely on them, because digit-run redaction alone misses names, emails and parts of SSNs, dates and phones.
+- Summary detail values sit in `<td class="cap">Label</td><td>value</td>` pairs. Tenant `mask_selectors` are `td.cap + td` and `td.acctno` in **both** tenant configs (a test asserts they match); screenshots and DOM dumps rely on them, because digit-run redaction alone misses names, emails and parts of SSNs, dates and phones. Tenant `unmask_selectors` (`table.statusbar td`, `td.hint`) are identical in both configs too: static chrome only, never a data cell.
 - Evidence screenshots show partial values from tenant `screenshot_reveal` (identical in both tenants, test-enforced): Member Number `•••01`, names as initials, SSN last 4, Phone last 2, Email `a•••@example.test`, State shown, ZIP last 2, Account Number last 4. Date of Birth, Address, City and balances stay fully masked.
 - Faults are switchable via the `?fault=` query param (sticky via cookie) or the `MOCKBANK_FAULT` env var.
 - **The UI must match the fixture artifact exactly**, or replay can't be tested:

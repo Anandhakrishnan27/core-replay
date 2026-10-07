@@ -19,6 +19,13 @@ overrides:
 mask_selectors:
   - "td.cap + td"
   - "td.acctno"
+# Reviewed UI chrome exempt from the screenshot rule that masks every leaf showing a digit. Keep in sync
+# across tenants. Only static text belongs here; mask_selectors still win inside these regions.
+#   table.statusbar td : screen code, branch / workstation, product version ("MBR100", "Core v2.3")
+#   td.hint            : field help text ("Digits only, up to 10 characters.")
+unmask_selectors:
+  - "table.statusbar td"
+  - "td.hint"
 # Partial values in EVIDENCE SCREENSHOTS only (DOM dumps, logs and the LLM stay fully masked).
 # A masked cell without a rule here (Date of Birth, Address, City, balances) is hidden completely.
 screenshot_reveal:

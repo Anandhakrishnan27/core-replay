@@ -54,6 +54,7 @@ from cua.discovery.stuck import StuckDetector
 from cua.discovery.tools import TOOLS
 from cua.evidence.logger import RunLogger
 from cua.handoff.controller import HandoffAborted, SessionControl
+from cua.handoff.lock import InputLock
 from cua.handoff.models import InterventionRequest
 from cua.handoff.operator import OperatorServer
 from cua.handoff.recorder import HumanElement, HumanRecorder
@@ -219,6 +220,10 @@ async def discover(
             except (LoginFailed, MissingCredentials) as e:
                 return finish("failed", f"login failed: {e}")
             logger.event("login_ok")
+            # Operator attached (headed): human input reaches the page only while a human holds control.
+            lock = InputLock(session.context, control) if operator is not None else None
+            if lock is not None:
+                await lock.install()
             surface = PlaywrightWebSurface(
                 session.page,
                 policy,
@@ -227,7 +232,9 @@ async def discover(
                 mode="discovery",
                 mask_selectors=tenant.mask_selectors,
                 reveal_rules=tenant.screenshot_reveal,
+                unmask_selectors=tenant.unmask_selectors,
                 control=control,
+                input_lock=lock,
             )
             agent = _Agent(
                 goal, params, policy, gate, logger, surface, control, recorder,

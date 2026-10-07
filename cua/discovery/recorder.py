@@ -78,7 +78,7 @@ class TraceRecorder:
         for a in self.trace.actions:
             value = a.value
             if value is not None:
-                if a.tool in ("fill", "fill_secret"):
+                if a.tool == "fill":
                     value = param_hash(value)
                 elif a.tool == "select":
                     value = scrub(page_value(value))

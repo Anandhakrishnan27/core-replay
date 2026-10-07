@@ -1,4 +1,4 @@
-"""CLI entry point: `cua discover | compile | validate | approve | list | replay`."""
+"""CLI entry point: `cua discover | validate | approve | list | replay`."""
 
 from __future__ import annotations
 
@@ -158,6 +158,10 @@ def replay(
     operator: OperatorFlag = None,
     operator_port: OperatorPort = 8001,
     headless: Headless = False,
+    evidence_dir: Annotated[
+        Path | None,
+        typer.Option(help="Parent folder for this run's evidence (default: evidence/_scratch, git-ignored)"),
+    ] = None,
 ) -> None:
     """Deterministic replay (no LLM). Prints the RunResult JSON.
 
@@ -166,6 +170,7 @@ def replay(
     Exit code: 0 success or business outcome (not an error), 1 failed, 2 rejected.
     """
     from cua.handoff.operator import OperatorUnavailable
+    from cua.replay.executor import SCRATCH_RUNS
     from cua.replay.executor import replay as run_replay
     from cua.schema.result import RunResult, RunStatus
 
@@ -183,6 +188,7 @@ def replay(
                 fault=fault,
                 operator=op,
                 headed=op is not None and not headless,  # the human uses this very window
+                evidence_root=evidence_dir or SCRATCH_RUNS,
             )
 
     try:

@@ -25,7 +25,7 @@ import secrets
 import time
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, nullcontext
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -40,6 +40,7 @@ from cua import catalog
 from cua.config import EVIDENCE_DIR, ROOT, Policy, Tenant, load_policy, load_tenant
 from cua.evidence.logger import RunLogger
 from cua.handoff.controller import ControlState, HandoffAborted, NotInControl, SessionControl
+from cua.handoff.lock import InputLock
 from cua.handoff.models import InterventionRequest
 from cua.handoff.operator import OperatorServer
 from cua.handoff.recorder import HumanRecorder
@@ -414,6 +415,8 @@ class _Run:
         self.targets = dict(artifact.targets)
         self.provider = SessionProvider(tenant)
         self.control = SessionControl(logger.run_id)
+        # Only with an operator (headed browser): human input reaches the page only in HUMAN.
+        self.input_lock = InputLock(session.context, self.control) if operator is not None else None
         self.surface = PlaywrightWebSurface(
             session.page,
             policy,
@@ -424,7 +427,9 @@ class _Run:
             targets=self.targets,
             mask_selectors=tenant.mask_selectors,
             reveal_rules=tenant.screenshot_reveal,
+            unmask_selectors=tenant.unmask_selectors,
             control=self.control,
+            input_lock=self.input_lock,
         )
         self.operator = operator
         # Only with an operator: someone can take control, so their actions must be captured.
@@ -446,6 +451,8 @@ class _Run:
         if self.recorder is not None:
             await self.recorder.install()  # before login: every document gets the listener
         await self._login(fault)
+        if self.input_lock is not None:
+            await self.input_lock.install()  # after sign-on, which types through the page itself
         await self._fingerprint()
         steps = self.artifact.steps
         i = 0
@@ -679,7 +686,8 @@ class _Run:
                 step, FailureCategory.SESSION_EXPIRED, "session expired during an irreversible step"
             )
         self.control.ensure_automation()
-        ok = await self.provider.reauthenticate(self.session)
+        async with self.input_lock.automation() if self.input_lock is not None else nullcontext():
+            ok = await self.provider.reauthenticate(self.session)  # types into the sign-on form
         self._recovered(step, cid, "reauthenticate", attempt, ok)
         if not ok:
             await self._escalate(step, FailureCategory.SESSION_EXPIRED, "re-authentication failed")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -14,7 +14,6 @@ class StuckDetector:
     consecutive_failures: int = 0
     _last_obs: str | None = None
     _repeats: int = 0
-    reasons: list[str] = field(default_factory=list)
 
     def record(self, observation_text: str, action_ok: bool) -> str | None:
         """Call once per loop iteration. Returns a stuck reason, or None."""

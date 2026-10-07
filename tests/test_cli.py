@@ -99,6 +99,13 @@ def test_replay_attaches_the_operator_only_when_asked(fake_replay, args, attache
         assert "operator page" not in result.stderr
 
 
+def test_replay_evidence_goes_to_scratch_unless_a_folder_is_given(fake_replay, tmp_path):
+    assert replay("--no-operator").exit_code == 2
+    assert fake_replay["evidence_root"] == executor.SCRATCH_RUNS
+    assert replay("--no-operator", "--evidence-dir", str(tmp_path)).exit_code == 2
+    assert fake_replay["evidence_root"] == tmp_path
+
+
 def test_busy_operator_port_is_refused_before_the_run(fake_replay):
     with socket.socket() as busy:
         busy.bind(("127.0.0.1", 0))

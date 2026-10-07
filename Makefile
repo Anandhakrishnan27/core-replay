@@ -15,9 +15,13 @@ lint:             ## lint, format check, types
 schema:           ## regenerate capabilities/artifact.schema.json
 	uv run python scripts/export_schema.py
 
-demo-discover:    ## real LLM discovery run (needs ANTHROPIC_API_KEY)
+# Saved versions are immutable and 1.0.0 (the committed discovery run) already exists: a new run saves
+# as VERSION. Override with `make demo-discover VERSION=1.2.0`.
+VERSION ?= 1.1.0
+
+demo-discover:    ## real LLM discovery run (needs ANTHROPIC_API_KEY) → saves VERSION
 	uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the savings balance" \
-	  --capability-id mockbank.member.lookup_savings_balance --param member_id=10001
+	  --capability-id mockbank.member.lookup_savings_balance --param member_id=10001 --version $(VERSION)
 
 demo-replay:      ## deterministic replay, success
 	uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --input member_id=10002 --supervised

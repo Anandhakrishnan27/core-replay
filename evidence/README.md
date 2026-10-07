@@ -1,21 +1,62 @@
 # Evidence
 
-Curated demo runs, committed so reviewers can inspect them without running anything.
+Curated runs, committed so reviewers can inspect them without running anything. Every file here is
+redacted on write: PII is a salted hash (`«member_id:sha256:…»`), screenshots are masked, and no raw
+member number, name, SSN, balance or account number appears in any log, result or DOM dump.
 
-| Folder | What it shows |
-|---|---|
-| `discovery_<run_id>/` | The real LLM-driven run: `run.jsonl` (decisions + actions, redacted), step screenshots, `trace.json`, the produced artifact |
-| `replay_<run_id>_success/` | Deterministic replay with a new input → `success` (+ any recoveries) |
-| `replay_<run_id>_not_found/` | Replay → `business_outcome: MEMBER_NOT_FOUND` |
-| `replay_<run_id>_handoff/` | Replay → unknown state → intervention → human takes over the same session → resume, with `human_actions` |
+## Runs
 
-Each run folder contains:
+One folder per kind of run; each holds one or more run folders (`discovery_<run_id>/`, `replay_<run_id>/`).
 
-- `run.jsonl`: one JSON event per line
-- `result.json`: the `RunResult`
-- `steps/NN_<step_id>.png`: masked screenshots
-- `steps/NN_<reason>.dom.<frame>.html`: redacted DOM per frame, on failure only
+| Folder | Run | Input / fault | Result |
+| --- | --- | --- | --- |
+| `discovery/` | `discovery_20261007T042631Z_e4c4` | **Real LLM discovery** (claude-opus-5-5), goal "look up member 10001 and read the savings balance" | completed → compiled → self-test passed → saved as `capabilities/mockbank/member.lookup_savings_balance/1.0.0.json` |
+| `replay_success/` | `replay_20261007T192138Z_00de` | `member_id=10002` (a member discovery never saw) | `success`, `SUCCESS` (balance returned to the caller; hashed here) |
+| `business_outcome/` | `replay_20261007T192139Z_36a1` | `member_id=99999` | `business_outcome`, `MEMBER_NOT_FOUND` |
+| `business_outcome/` | `replay_20261007T192141Z_e1d5` | `member_id=10003` | `business_outcome`, `NO_SHARE_SAVINGS` (outcome derived by the compiler) |
+| `recovery/` | `replay_20261007T192142Z_3321` | `--fault notice` | `success` after recovery `system_notice → dismiss` |
+| `recovery/` | `replay_20261007T192144Z_db18` | `--fault session_expired` | `success` after recovery `session_expired → reauthenticate` |
+| `hard_failure/` | `replay_20261007T192145Z_8be7` | `--fault denied` | `failed`, `PERMISSION_DENIED` (+ redacted DOM per frame) |
+| `human_handoff/` | *(to record)* | `--fault maint`, operator attached | unknown screen → escalation → human takes control of the same session → hand back → resync → `success`, with `handoffs[].human_actions` |
 
-Playwright traces are **not** committed. They are off by default and, when enabled with the explicit flag,
-are written to `evidence/_scratch/traces/` (git-ignored), because they contain unmasked page content and
-typed values.
+Replays ran the committed `1.0.0` artifact against the local mock bank:
+
+```bash
+uv run cua replay mockbank.member.lookup_savings_balance --tenant cu_alpha --supervised --no-operator \
+  --evidence-dir evidence/<folder> <input / fault>
+```
+
+`--supervised` because the artifact is still a draft; `--no-operator` so nothing waits for a human. The
+handoff run is the same command with `--input member_id=10001 --fault maint --evidence-dir evidence/human_handoff`
+and **without** `--no-operator`.
+
+## What is in each folder
+
+**Discovery** (`discovery/discovery_<run_id>/`):
+
+- `run.jsonl`: one JSON event per line: LLM turns (tokens, stop reason), tool results, actions, compile, self-test, save
+- `trace.json`: what the model did and why (element snapshots, verified locators, page states, short rationale); typed values and outputs hashed
+- `steps/NN_step_NN_<tool>.png`: masked screenshot after each action
+- `artifact.json`: the compiled draft (same content as the catalog's `1.0.0.json`)
+- `selftest.json` + `replay_<run_id>/`: the compiler's self-test replay in a fresh browser context
+
+This run was recorded before the mock bank's teller-console restyle, so its screenshots show the earlier
+layout and mask colour, and the paths inside it say `evidence/_scratch/…` (where runs are written by
+default; it was moved here unchanged). Its `trace.json` also predates the removal of two unused trace
+fields (`id_attr`, `secret_name`, both always `null`). It is kept exactly as recorded.
+
+**Replay** (`<kind>/replay_<run_id>/`):
+
+- `run.jsonl`: one JSON event per line (step started, target resolved + locator index, race result, condition matched, recovery, escalation, finish)
+- `result.json`: the `RunResult` (outputs redacted by sensitivity; the caller receives real values)
+- `artifact.json`: the effective artifact that ran (after tenant overrides)
+- `steps/NN_<step_id>.png`: masked screenshot after each step; `NN_<step_id>_<condition>.png` where a condition ended the run
+- `steps/NN_<reason>.dom.<i>_<frame>.html`: redacted DOM per frame, on failure and escalation only
+
+Screenshots mask sensitive targets, the tenant's `mask_selectors`, every text-entry control and every
+other leaf showing a digit; reviewed chrome (status bar, field hints) stays readable. Some fields show a
+partial value per the tenant's `screenshot_reveal` (e.g. SSN `•••-••-7731`); Date of Birth, Address, City
+and balances stay fully masked.
+
+Playwright traces are **not** committed: off by default, and when enabled (tests only) written to
+`evidence/_scratch/traces/` (git-ignored), because they contain unmasked page content and typed values.

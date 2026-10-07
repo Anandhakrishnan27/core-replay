@@ -1,0 +1,29 @@
+{
+  "run_id": "20261007T192145Z_8be7",
+  "mode": "replay",
+  "capability_id": "mockbank.member.lookup_savings_balance",
+  "capability_version": "1.0.0",
+  "tenant_id": "cu_alpha",
+  "status": "failed",
+  "outcome_code": null,
+  "outputs": {},
+  "failure": {
+    "category": "PERMISSION_DENIED",
+    "step_id": "click_search_button",
+    "step_intent": "Click the button 'Search'",
+    "expected": "target_visible(share_savings_balance_cell) and text_present(Member Summary)",
+    "observed": "Service account lacks access",
+    "retryable": false,
+    "evidence": [
+      "steps/04_click_search_button_permission_denied.png",
+      "steps/04_click_search_button_permission_denied.dom.0_top.html",
+      "steps/04_click_search_button_permission_denied.dom.1_nav.html",
+      "steps/04_click_search_button_permission_denied.dom.2_main.html"
+    ]
+  },
+  "recoveries": [],
+  "handoffs": [],
+  "started_at": "2026-10-07T19:21:45.915339Z",
+  "duration_ms": 988,
+  "evidence_dir": "evidence/hard_failure/replay_20261007T192145Z_8be7"
+}

@@ -59,14 +59,13 @@ core-replay/
 │   ├── surface/                  # base.py (protocol), playwright_web.py, locators.py
 │   ├── session/provider.py       # login + reauthenticate, credentials from env only
 │   ├── safety/                   # policy.py (PolicyGate), redact.py
-│   ├── discovery/                # agent, observe, tools, prompts, stuck, recorder
+│   ├── discovery/                # agent, prompts, tools, stuck, recorder, pipeline
 │   ├── compiler/                 # compile.py + one module per pass
 │   ├── replay/                   # executor, preflight, resolver, checks, extract, overrides
 │   ├── handoff/                  # controller (state machine), models, recorder, operator (+ page)
 │   └── evidence/logger.py        # run.jsonl, step screenshots, DOM on failure, PW trace
 ├── capabilities/                 # artifact.schema.json (generated) + <product>/<capability>/<semver>.json
 ├── evidence/                     # curated demo runs (see evidence/README.md)
-├── examples/results.json
 ├── scripts/export_schema.py
 └── tests/
 ```
@@ -117,7 +116,7 @@ The schema lives in `cua/schema/artifact.py`, and `capabilities/artifact.schema.
 
 ## 4. Result contract and error taxonomy
 
-The contract lives in `cua/schema/result.py`, with examples in `examples/results.json`.
+The contract lives in `cua/schema/result.py`, with examples in `tests/fixtures/results.json`.
 
 | Class | Examples | Replay behavior | `RunResult.status` |
 |---|---|---|---|
@@ -173,6 +172,7 @@ PAUSED | HUMAN ──abort() / timeout──► ABORTED → RunResult failed, ha
 
 - **Triggers.** Replay: an `escalate` handler, `UNKNOWN_STATE`, or recovery exhausted. Discovery: the stuck detector (step budget, same screen 3×, 3 failed actions), the model calling `ask_human`, or policy `NeedsHuman` (an irreversible action). Irreversible steps in replay are refused in pre-flight, never escalated mid-transaction.
 - **When an operator is attached.** `cua discover` (default) and `cua replay --supervised` (or `--operator`). The CLI prints the operator URL with a per-run token (CSRF protection; real authentication is a cut). Unattended replays have no operator: an escalation ends the run at once ("no operator available").
+- **Input lock.** With an operator attached, the headed window accepts human input only in HUMAN (`cua/handoff/lock.py`); automation opens it only for its own action.
 - **Same live session.** The operator API runs in-process on :8001 in the same event loop as the executor. The human uses the same headed Chromium window, so context, cookies and page are never recreated. Remote streaming (CDP screencast or noVNC) is mocked and documented.
 - **Intervention request** (`handoff/models.py`): run, capability or goal, step and intent, reason, category, current URL, expected state, masked screenshot.
 - **Recording.** `expose_binding` plus an injected listener capture clicks and changes as `HumanAction`s with semantic hints. Typed values are reduced to `«redacted:len=n»`.
@@ -191,7 +191,7 @@ PAUSED | HUMAN ──abort() / timeout──► ABORTED → RunResult failed, ha
 | Credentials | `SessionProvider` reads env only. Never sent to the LLM, logged, or stored in artifacts. |
 | No literals in artifacts | Schema validator (templates only) |
 | Redaction | `pii` → salted hash in logs; `secret` → `«secret:name»`; human-typed → length only; pre-flight errors never echo values |
-| Screenshots and DOM dumps | Screenshots mask every element any locator of a `sensitive` target matches, plus the tenant's `mask_selectors` (PII on screen that is not a target, e.g. member name and number). DOM dumps drop form values, replace masked regions with `«masked»` and hash digit runs of 4+ digits. **Limit:** only listed regions are masked; PII elsewhere on a page (new fields after an app upgrade, free-text notes) is visible in screenshots until a tenant adds a selector. |
+| Screenshots and DOM dumps | Screenshots mask every element any locator of a `sensitive` target matches, plus the tenant's `mask_selectors` (PII on screen that is not a target, e.g. member name and number), every leaf element showing a digit, and every text-entry control. Tenant `unmask_selectors` (reviewed chrome: status bar, field hints) are exempt from the digit rule only. DOM dumps drop form values, replace masked regions with `«masked»` and hash digit runs of 4+ digits. **Limit:** only listed regions are masked; PII elsewhere on a page (new fields after an app upgrade, free-text notes) is visible in screenshots until a tenant adds a selector. |
 | Playwright traces | Off by default; explicit opt-in only; written to `evidence/_scratch/` (git-ignored), never committed. They contain unmasked page content, typed values and session cookies. Login and re-authentication run with tracing fully stopped, so credentials are not in them. |
 | Untrusted page content | Wrapped as `<page untrusted="true">` in prompts; policy blocks the consequences regardless of what the model is told |
 | Limits | Discovery uses synthetic data only. In production, observations sent to the model would also need masking. |
@@ -341,3 +341,7 @@ Add a row each time you make a non-obvious decision. This feeds `REPORT.md` and 
 | 2026-10-07 | No built-in mock bank sign-on: `MOCKBANK_USER` / `MOCKBANK_PASSWORD` come only from env or `.env` (the mock bank and the CLI both load `.env`); unset → the mock bank refuses every login and runs fail at login. Supersedes the `teller01` / `mockbank-demo` default row | Keep a committed demo default | Invariant 5: no credentials in the repo, even synthetic ones. Tests set their own values in fixtures |
 | 2026-10-07 | Evidence screenshots show bank-style partial values (SSN/account last 4, initials, masked email) from tenant `screenshot_reveal` rules; a value without a rule stays fully masked; mask colour neutral gray | Full masking only (unreadable evidence); overlays drawn over the cells | Reviewers can tell members and fields apart. The partial text is computed in the page and swapped in only for the screenshot, so raw values never reach Python, and an overlay can't misalign and expose text. DOM dumps, logs and the LLM stay fully masked. A revealed cell the page changes meanwhile discards the screenshot and retakes it fully masked. Rules must name a `mask_selectors` entry (validated). Deliberate relaxation of invariant 4 |
 | 2026-10-07 | Mock bank restyled as an early-2000s teller console: shared `_screen.html` (title bar, content, status bar with screen codes MB000 / MBR100 / MBR110 / SYS403 / SYS500 / SYS503), institution "Brindlewood Federal Credit Union" (fictional) in the nav, sign-on and home only, greyed non-link menu items, centred sign-on and notice dialogs. Styling only: every locator hook, condition text and caption/value row is unchanged | Modern UI; screen code beside the title | Still legacy (frameset, tables, no ids, no doctype). The title cell stays alone in its row and the status-bar code is not bold, because `observe()` reads bold lone cells as headings and bold cells as captions. The saved `1.0.0` artifact replays unchanged |
+| 2026-10-07 | Tenant `unmask_selectors` (`table.statusbar td`, `td.hint`): reviewed UI chrome exempt from the screenshot rule that masks every leaf showing a digit; mask_selectors, sensitive targets and text-entry controls still win inside them; an entry may not also be in `mask_selectors` (validated) | Mask by data shape instead of any digit; accept the over-masking | The digit rule blacked out the field hint ("up to 10 characters") and the whole status bar (screen code, version), which made evidence harder to read. An explicit, reviewed list keeps the safety net everywhere else; shape-based masking would let short unlisted values ("Apt 12") through |
+| 2026-10-07 | `make demo-discover` saves `VERSION` (default `1.1.0`); the committed `1.0.0` stays the evidence-backed artifact | Delete `1.0.0` before each demo; overwrite | Saved versions are immutable, and reviewers without an API key still need a committed artifact to replay |
+| 2026-10-07 | `cua replay --evidence-dir` writes a run straight into `evidence/` for curation; the default stays `evidence/_scratch/` (git-ignored). The real discovery run was moved from `_scratch` unchanged | Copy scratch runs and rewrite their paths | Curated replays keep correct internal paths; recorded discovery evidence is never edited |
+| 2026-10-07 | Operator input lock (`cua/handoff/lock.py`): with an operator attached, every document blocks pointer and key input (capture phase on `window`) unless the state is HUMAN or automation has opened it for one action (`Surface.act`, re-login). New documents start locked and ask Python; answers are versioned so a stale "unlocked" is ignored. `SessionControl` notifies subscribers on each transition and the operator API awaits them (`flush`) before responding | Rely on the operator not touching the window; a blocking overlay element | Found on the demo: a click in the headed window while automation held control fixed the page during the race, so the run "succeeded" with an unrecorded human. Playwright clicks are trusted events too, so the lock cannot use `isTrusted`; an overlay element would break Playwright actionability checks. Now "who is in control" is enforced in the browser, not just in Python |

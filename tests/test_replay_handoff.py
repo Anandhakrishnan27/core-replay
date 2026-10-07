@@ -157,6 +157,47 @@ async def test_human_fixes_the_page_and_replay_resumes_after_the_checkpoint(hand
     assert stored["handoffs"][0]["resolution"] == "resumed"
 
 
+async def raw_click_try_again(person: Operator) -> None:
+    """A trackpad-style click: trusted input at the link's coordinates, no actionability checks."""
+    page = person.main().page
+    box = await person.main().get_by_text("Try Again").bounding_box()
+    assert box is not None
+    await page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+
+async def test_stray_click_before_take_control_is_ignored_and_the_run_really_hands_off(handoff_run):
+    async def human(person: Operator) -> None:
+        await person.paused()
+        await raw_click_try_again(person)  # before taking control: the input lock swallows it
+
+        async def left_maintenance() -> bool:
+            return "Maintenance Window" not in await person.main().locator("td.hdr").inner_text()
+
+        assert not await poll_until(left_maintenance, 1_000, 50), "a stray click changed the live page"
+        await person.take()
+        await raw_click_try_again(person)  # the same click, now as the human in control
+        await person.hand_back()
+
+    result, _ = await handoff_run(human)
+    assert result.status is RunStatus.success, result.failure
+    [h] = result.handoffs
+    assert h.resolution == "resumed" and h.resumed_at_step == "read_balance"
+    clicks = [a for a in h.human_actions if a.kind == "click"]
+    assert [a.target_hint for a in clicks] == ["link 'Try Again'"]  # only the click made in HUMAN
+
+
+async def test_reauthentication_passes_the_input_lock(handoff_run):
+    async def nobody(person: Operator) -> None:
+        return None  # an operator is attached (so the lock is on), but nothing escalates
+
+    result, _ = await handoff_run(nobody, fault="session_expired")
+    assert result.status is RunStatus.success, result.failure
+    assert [(r.condition_id, r.action, r.succeeded) for r in result.recoveries] == [
+        ("session_expired", "reauthenticate", True)
+    ]
+    assert result.handoffs == []
+
+
 async def test_hand_back_without_a_fix_asks_again_with_the_expected_state(handoff_run):
     async def human(person: Operator) -> None:
         await person.paused()

@@ -16,7 +16,6 @@ risk:
 unattended_requires_review_status: approved
 
 redaction:
-  hash_salt_env: CUA_REDACTION_SALT
   mask_sensitive_targets_in_screenshots: true
 
 limits:

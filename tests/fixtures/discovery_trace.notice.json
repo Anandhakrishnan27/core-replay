@@ -22,7 +22,6 @@
         "accessible_name": "Member Lookup",
         "label": null,
         "name_attr": null,
-        "id_attr": null,
         "text": "Member Lookup",
         "nearby_text": {},
         "table_context": null,
@@ -53,7 +52,6 @@
         ]
       },
       "value": null,
-      "secret_name": null,
       "output_name": null,
       "page_before": {
         "url": "http://127.0.0.1:8000/console",
@@ -99,7 +97,6 @@
         "accessible_name": "OK",
         "label": null,
         "name_attr": null,
-        "id_attr": null,
         "text": null,
         "nearby_text": {},
         "table_context": null,
@@ -125,7 +122,6 @@
         ]
       },
       "value": null,
-      "secret_name": null,
       "output_name": null,
       "page_before": {
         "url": "http://127.0.0.1:8000/console",
@@ -172,7 +168,6 @@
         "accessible_name": null,
         "label": null,
         "name_attr": "mbrno",
-        "id_attr": null,
         "text": null,
         "nearby_text": {
           "left": "Member Number"
@@ -200,7 +195,6 @@
         ]
       },
       "value": "10001",
-      "secret_name": null,
       "output_name": null,
       "page_before": {
         "url": "http://127.0.0.1:8000/console",
@@ -248,7 +242,6 @@
         "accessible_name": "Search",
         "label": null,
         "name_attr": null,
-        "id_attr": null,
         "text": null,
         "nearby_text": {},
         "table_context": null,
@@ -274,7 +267,6 @@
         ]
       },
       "value": null,
-      "secret_name": null,
       "output_name": null,
       "page_before": {
         "url": "http://127.0.0.1:8000/console",
@@ -327,7 +319,6 @@
         "accessible_name": "\u00abshape:currency\u00bb",
         "label": null,
         "name_attr": null,
-        "id_attr": null,
         "text": "\u00abshape:currency\u00bb",
         "nearby_text": {
           "left": "Share Savings",
@@ -364,7 +355,6 @@
         ]
       },
       "value": null,
-      "secret_name": null,
       "output_name": "savings_balance",
       "page_before": {
         "url": "http://127.0.0.1:8000/console",
@@ -422,7 +412,6 @@
         "accessible_name": "Active",
         "label": null,
         "name_attr": null,
-        "id_attr": null,
         "text": "Active",
         "nearby_text": {
           "left": "\u00abshape:currency\u00bb",
@@ -459,7 +448,6 @@
         ]
       },
       "value": null,
-      "secret_name": null,
       "output_name": "account_status",
       "page_before": {
         "url": "http://127.0.0.1:8000/console",

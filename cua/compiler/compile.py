@@ -139,7 +139,7 @@ def compile_trace(
     planned: list[_Planned] = []
     for a in path:
         tid: str | None
-        if a.tool in ("fill", "fill_secret"):
+        if a.tool == "fill":
             name = param_for(a, trace)
             inputs.setdefault(name, input_spec(name, a))
             tid = target_for(a, sensitive=inputs[name].sensitivity is not Sensitivity.public)

@@ -33,6 +33,7 @@
 <body>
 <h1>CUA Operator</h1>
 <p class="sub">Runs waiting for a human. Take control, fix the screen in the browser window that automation is using, then hand back.</p>
+<p><label>Operator id <input id="who" value="operator" maxlength="64" autocomplete="off"></label></p>
 <div id="error" class="error"></div>
 <div id="runs"><p class="empty">Loading…</p></div>
 
@@ -50,15 +51,23 @@ function el(tag, attrs = {}, ...children) {
   return e;
 }
 
+function showError(text) { document.getElementById("error").textContent = text; }
+
+// No prompt() dialogs: some embedded browsers (e.g. an editor's preview) block them silently.
 async function post(runId, op) {
   let url = `/api/runs/${encodeURIComponent(runId)}/${op}`;
   if (op === "take-control") {
-    const who = prompt("Your operator id (letters, digits, . _ @ -)", "operator");
-    if (!who) return;
+    const who = document.getElementById("who").value.trim();
+    if (!/^[A-Za-z0-9_.@-]{1,64}$/.test(who)) { showError("Operator id: letters, digits and . _ @ - only (max 64)."); return; }
     url += `?operator_id=${encodeURIComponent(who)}`;
   }
-  const r = await fetch(url, { method: "POST", headers: H });
-  document.getElementById("error").textContent = r.ok ? "" : `${op}: ${(await r.json()).detail}`;
+  try {
+    const r = await fetch(url, { method: "POST", headers: H });
+    showError(r.ok ? "" : `${op}: ${(await r.json()).detail}`);
+  } catch (e) {
+    showError(`${op}: operator API unreachable (did the run finish?)`);
+  }
+  shown = "";  // force a re-render with the new state
   refresh();
 }
 
@@ -98,14 +107,19 @@ async function render(run) {
     el("div", { class: "grid" }, left, right));
 }
 
+// Re-render only when something changed: rebuilding the buttons every poll can swallow a click.
+let shown = "";
 async function refresh() {
   try {
     const r = await fetch("/api/interventions", { headers: H });
-    if (!r.ok) { document.getElementById("error").textContent = "Access denied: open the operator URL printed by the run (it carries the token)."; return; }
+    if (!r.ok) { showError("Access denied: open the operator URL printed by the run (it carries the token)."); return; }
     const runs = await r.json();
+    const key = JSON.stringify(runs.map((x) => [x.run_id, x.state, x.epoch, x.human_actions]));
+    if (key === shown) return;
+    shown = key;
     const box = document.getElementById("runs");
     box.replaceChildren(...(runs.length ? await Promise.all(runs.map(render)) : [el("p", { class: "empty" }, "No live runs.")]));
-  } catch (e) { document.getElementById("error").textContent = "Operator API unreachable (did the run finish?)"; }
+  } catch (e) { showError("Operator API unreachable (did the run finish?)"); }
 }
 refresh();
 setInterval(refresh, 2000);

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from contextlib import AbstractAsyncContextManager, nullcontext
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -24,6 +25,7 @@ from playwright.async_api import Locator as PWLocator
 from cua.config import Policy, RevealRule
 from cua.evidence.logger import RunLogger
 from cua.handoff.controller import SessionControl
+from cua.handoff.lock import InputLock
 from cua.safety.policy import Mode, NeedsHuman, PolicyGate, PolicyViolation
 from cua.safety.redact import data_shape, page_value, redact_digit_runs
 from cua.schema.artifact import (
@@ -90,7 +92,8 @@ _SERIALIZE_JS = """({paths, selectors}) => {
 _RAW_BLOCK_RE = re.compile(r"(<(style|script)\b.*?</\2>)", re.S | re.I)
 # Every screenshot (discovery AND replay) masks every leaf element showing a digit and every text-entry
 # control: data on screen that no artifact target names (e.g. another account's balance) must not leak.
-# Over-masking is the safe direction.
+# Over-masking is the safe direction. Tenant `unmask_selectors` (reviewed UI chrome: status bars, field
+# hints) are exempt from this digit rule only, never from mask_selectors, sensitive targets or text entry.
 _DIGIT_RE = re.compile(r"\d")
 _LEAF = f"body *:not(:has(*)):not([{REVEAL_ATTR}])"
 _TEXT_ENTRY = (
@@ -196,7 +199,9 @@ class PlaywrightWebSurface:
         targets: dict[str, Target] | None = None,
         mask_selectors: Sequence[str] = (),
         reveal_rules: Sequence[RevealRule] = (),
+        unmask_selectors: Sequence[str] = (),
         control: SessionControl | None = None,
+        input_lock: InputLock | None = None,
     ) -> None:
         self.page = page
         self.policy = policy
@@ -207,7 +212,10 @@ class PlaywrightWebSurface:
         self.targets = targets or {}
         self.mask_selectors = list(mask_selectors)
         self.reveal_rules = list(reveal_rules)
+        # Leaves that ARE, or sit inside, reviewed chrome skip the digit mask (see _mask_locators).
+        self._digit_leaf = _LEAF + "".join(f":not(:is({s}, {s} *))" for s in unmask_selectors)
         self.control = control
+        self.input_lock = input_lock  # operator attached: human input only while a human holds control
         self._snapshots = 0
 
     # ---- observe ------------------------------------------------------------------------------- #
@@ -301,7 +309,6 @@ class PlaywrightWebSurface:
             accessible_name=safe(name),
             label=safe(info["label"], False),
             name_attr=info["name_attr"],
-            id_attr=info["id_attr"],
             text=safe(info["text"]),
             nearby_text=nearby,
             table_context=table,
@@ -493,28 +500,37 @@ class PlaywrightWebSurface:
 
         try:
             if isinstance(action, Navigate):
-                await self.page.goto(url)
-            elif isinstance(action, Click):
-                assert resolved is not None
-                await resolved.handle.click()
-            elif isinstance(action, Fill):
-                assert resolved is not None
-                if value is None:
-                    raise ValueError("fill needs a value")
-                await resolved.handle.fill(value)
-            elif isinstance(action, SelectOption):
-                assert resolved is not None
-                await resolved.handle.select_option(label=action.option)
-            elif isinstance(action, Press):
-                if resolved is not None:
-                    await resolved.handle.press(action.key)
-                else:
-                    await self.page.keyboard.press(action.key)
+                await self.page.goto(url)  # no input events: needs no lock opening
+            else:
+                async with self._own_input():
+                    await self._input(action, resolved, value)
         except PlaywrightError as e:
             # Playwright messages can echo arguments, so fill never forwards them.
             detail = "" if isinstance(action, Fill) else f": {str(e).splitlines()[0]}"
             raise ActionFailed(f"{action.type} on '{target_id}' failed{detail}") from None
         self.logger.event("action", action=action.type, target=target_id, risk=risk.value)
+
+    def _own_input(self) -> AbstractAsyncContextManager[None]:
+        """Automation's own input passes the operator input lock for this one action."""
+        return self.input_lock.automation() if self.input_lock is not None else nullcontext()
+
+    async def _input(self, action: Action, resolved: Resolved | None, value: str | None) -> None:
+        if isinstance(action, Click):
+            assert resolved is not None
+            await resolved.handle.click()
+        elif isinstance(action, Fill):
+            assert resolved is not None
+            if value is None:
+                raise ValueError("fill needs a value")
+            await resolved.handle.fill(value)
+        elif isinstance(action, SelectOption):
+            assert resolved is not None
+            await resolved.handle.select_option(label=action.option)
+        elif isinstance(action, Press):
+            if resolved is not None:
+                await resolved.handle.press(action.key)
+            else:
+                await self.page.keyboard.press(action.key)
 
     async def read(self, resolved: Resolved) -> str:
         """Visible text (or form value) of the element, whitespace-normalized. Never logged here."""
@@ -583,7 +599,8 @@ class PlaywrightWebSurface:
 
     def _mask_locators(self) -> list[PWLocator]:
         """Masks, in all frames: everything ANY locator of a sensitive target matches, tenant mask_selectors,
-        every leaf element showing a digit, and every text-entry control. Over-masking is the safe direction.
+        every leaf element showing a digit (except tenant unmask_selectors chrome), and every text-entry
+        control. Over-masking is the safe direction.
         """
         masks: list[PWLocator] = []
         for target in self._sensitive():
@@ -596,7 +613,7 @@ class PlaywrightWebSurface:
         for frame in self.page.frames:
             # A cell showing a partial value (see _REVEAL_JS) is exempt; sensitive targets above are not.
             masks.extend(frame.locator(f":is({sel}):not([{REVEAL_ATTR}])") for sel in self.mask_selectors)
-            masks.append(frame.locator(_LEAF, has_text=_DIGIT_RE))
+            masks.append(frame.locator(self._digit_leaf, has_text=_DIGIT_RE))
             masks.append(frame.locator(_TEXT_ENTRY))
         return masks
 

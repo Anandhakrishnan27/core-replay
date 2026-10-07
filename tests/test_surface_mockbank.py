@@ -602,10 +602,56 @@ async def test_page_changing_a_revealed_cell_discards_the_screenshot(
         assert region_is_mask_color(png, await loc.bounding_box())
 
 
+async def test_reviewed_chrome_is_readable_but_the_typed_member_number_is_masked(
+    console, session, artifact, run_logger
+):
+    await open_lookup_form(console, artifact)
+    assert await wait_holds(console, step(artifact, "go_to_lookup").expect, artifact)
+    await act_step(console, artifact, "enter_member_id", value="10002")
+    files = await console.snapshot("enter_member_id")
+    png = decode_png((run_logger.dir / files[0]).read_bytes())
+    main = session.page.frame(name="main")
+    assert main is not None
+    field = await main.locator("td.cap + td").bounding_box()  # the cell holding the input
+    hint = await main.locator("td.hint").bounding_box()  # "Digits only, up to 10 characters."
+    status = [await loc.bounding_box() for loc in await main.locator("table.statusbar td").all()]
+    assert field is not None and region_is_mask_color(png, field)
+    # Both show digits ("10", "MBR100", "Core v2.3"), but are tenant unmask_selectors chrome.
+    assert hint is not None and not region_is_mask_color(png, hint)
+    assert len(status) == 3 and not any(region_is_mask_color(png, b) for b in status if b)
+
+
+async def test_unmask_selectors_never_exempt_masked_fields_or_sensitive_targets(
+    console, make_surface, session, artifact, run_logger
+):
+    # Even exempting the whole page from the digit rule leaves every other mask in place.
+    surface = make_surface(unmask_selectors=["body"], reveal_rules=())
+    member = await open_summary(surface, artifact, "10002")
+    files = await surface.snapshot("member_summary")
+    png = decode_png((run_logger.dir / files[0]).read_bytes())
+    main = session.page.frame(name="main")
+    assert main is not None
+    cells = [*await main.locator("td.cap + td").all(), *await main.locator("td.acctno").all()]
+    assert len(cells) == 12 + len(member.accounts)
+    for loc in cells:
+        box = await loc.bounding_box()
+        assert box is not None and region_is_mask_color(png, box)
+    balance = await surface.resolve("savings_balance_cell", artifact.targets["savings_balance_cell"])
+    box = await balance.handle.bounding_box()
+    assert box is not None and region_is_mask_color(png, box)
+
+
+def test_unmask_selector_cannot_also_be_masked(tenant):
+    data = tenant.model_dump() | {"unmask_selectors": ["td.acctno"]}
+    with pytest.raises(ValidationError, match="also in mask_selectors"):
+        Tenant.model_validate(data)
+
+
 def test_tenants_mask_and_reveal_the_same_member_fields(tenant):
     beta = load_tenant("cu_beta", ROOT / "config")
     assert {"td.cap + td", "td.acctno"} <= set(tenant.mask_selectors)
     assert beta.mask_selectors == tenant.mask_selectors
+    assert beta.unmask_selectors == tenant.unmask_selectors
     assert beta.screenshot_reveal == tenant.screenshot_reveal
     revealed = {r.caption for r in tenant.screenshot_reveal if r.selector == "td.cap + td"}
     assert revealed == {cap for cap, shown in REVEALED_10002.items() if shown}

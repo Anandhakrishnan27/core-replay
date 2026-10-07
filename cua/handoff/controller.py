@@ -10,11 +10,14 @@ Invariants:
   - Automation calls ensure_automation() before EVERY action; it raises unless state is AUTOMATION.
   - `epoch` increments on every transfer, so stale actions from an earlier holder are detectable.
   - The browser context is never recreated: the human uses the same live session.
+  - With an operator attached, the browser accepts human input only in HUMAN (cua.handoff.lock).
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from enum import Enum
 
@@ -50,6 +53,8 @@ class SessionControl:
         self.request: InterventionRequest | None = None
         self.history: list[tuple[datetime, ControlState, str]] = []
         self._released = asyncio.Event()
+        self._subscribers: list[Callable[[ControlState], Awaitable[None] | None]] = []
+        self._pending: set[asyncio.Task[None]] = set()  # async subscriber work not finished yet
 
     # -- helpers -------------------------------------------------------------
     def _move(self, allowed_from: set[ControlState], to: ControlState, holder: str) -> None:
@@ -58,6 +63,21 @@ class SessionControl:
         self.state, self.holder = to, holder
         self.epoch += 1
         self.history.append((datetime.now(UTC), to, holder))
+        for notify in self._subscribers:
+            work = notify(to)
+            if inspect.isawaitable(work):
+                task = asyncio.ensure_future(work)
+                self._pending.add(task)
+                task.add_done_callback(self._pending.discard)
+
+    def subscribe(self, notify: Callable[[ControlState], Awaitable[None] | None]) -> None:
+        """Called after every transition with the new state (e.g. the browser input lock); may be async."""
+        self._subscribers.append(notify)
+
+    async def flush(self) -> None:
+        """Wait until async subscribers have applied every transition so far (e.g. the page is unlocked)."""
+        while self._pending:
+            await asyncio.gather(*self._pending, return_exceptions=True)
 
     # -- automation side ------------------------------------------------------
     def ensure_automation(self) -> None:

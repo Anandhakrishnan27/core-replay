@@ -31,7 +31,6 @@ class ElementSnapshot(_Model):
     accessible_name: str | None = None
     label: str | None = None
     name_attr: str | None = None
-    id_attr: str | None = None
     text: str | None = Field(default=None, description="Redacted if the element is sensitive.")
     nearby_text: dict[str, str] = Field(default_factory=dict, description="left/above anchor captions")
     table_context: TableContext | None = None
@@ -56,12 +55,11 @@ class TraceAction(_Model):
     seq: int
     at: datetime
     actor: Literal["llm", "human"]
-    tool: Literal["click", "fill", "fill_secret", "select", "press", "navigate", "extract", "dismiss"]
+    tool: Literal["click", "fill", "select", "press", "extract", "dismiss"]
     element: ElementSnapshot | None = None
     value: str | None = Field(
         default=None, description="Literal typed value (redacted in logs, used by compiler)."
     )
-    secret_name: str | None = None
     output_name: str | None = None
     page_before: PageState
     page_after: PageState

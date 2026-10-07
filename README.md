@@ -40,16 +40,24 @@ make setup                 # uv sync + playwright install chromium
 ```bash
 make mockbank              # terminal 1: target app on http://localhost:8000
 
-make demo-discover         # terminal 2: real LLM run → capabilities/.../x.y.z.json (draft)
+make demo-discover         # terminal 2: real LLM run → capabilities/.../1.1.0.json (draft; VERSION=x.y.z to change)
 make demo-replay           # replay with a NEW member id → success (--supervised: artifact is still a draft)
 make demo-notfound         # → business_outcome MEMBER_NOT_FOUND
 make demo-handoff          # → escalation; open the printed operator URL, take control,
                            #   click "Try Again" in the Chromium window, hand back → success
 ```
 
-The demo targets run `--supervised` for now, so draft artifacts may replay. Don't run `cua approve` on the
-hand-written fixture (`capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`): it rewrites the file.
-Approval for unattended replay comes back after Phase 4, on the generated artifact.
+`capabilities/mockbank/member.lookup_savings_balance/1.0.0.json` is committed: it is the artifact from the
+real discovery run in [`evidence/`](evidence/). Saved versions are immutable, so `make demo-discover` saves a
+new version (`1.1.0` by default), and the replay targets use the newest one. **No API key?** Skip
+`demo-discover`: the replay targets run the committed `1.0.0`.
+
+The replay targets pass `--supervised` because artifacts are saved as drafts. Unattended replay needs
+approval first: `uv run cua approve mockbank.member.lookup_savings_balance --reviewer <name>` (this rewrites
+the artifact's `review` block in place).
+
+Runs write their evidence to `evidence/_scratch/` (git-ignored); `cua replay --evidence-dir evidence` writes a
+run you want to keep straight into [`evidence/`](evidence/).
 
 **Operator page:** `cua replay --supervised` (or `--operator`) and `cua discover` serve it on
 `127.0.0.1:8001` (`--operator-port`) for the length of the run and print its URL, e.g.

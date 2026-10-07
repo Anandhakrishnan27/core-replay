@@ -11,7 +11,7 @@ from cua.schema import CapabilityArtifact, RunResult
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT = ROOT / "tests/fixtures/lookup_savings_balance.handwritten.json"
-RESULTS = ROOT / "examples/results.json"
+RESULTS = ROOT / "tests/fixtures/results.json"
 
 
 @pytest.fixture

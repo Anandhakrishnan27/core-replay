@@ -34,9 +34,6 @@ class RunLogger:
         with self._log.open("a", encoding="utf-8") as f:
             f.write(json.dumps(line, default=str) + "\n")
 
-    def step_screenshot_path(self, index: int, step_id: str) -> Path:
-        return self.dir / "steps" / f"{index:02d}_{step_id}.png"
-
     def write_json(self, name: str, model: BaseModel | dict[str, Any]) -> Path:
         path = self.dir / name
         data = model.model_dump(mode="json") if isinstance(model, BaseModel) else model

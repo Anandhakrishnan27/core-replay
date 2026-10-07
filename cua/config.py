@@ -25,7 +25,6 @@ class RiskPolicy(_Cfg):
 
 
 class RedactionPolicy(_Cfg):
-    hash_salt_env: str
     mask_sensitive_targets_in_screenshots: bool = True
 
 
@@ -79,6 +78,10 @@ class Tenant(_Cfg):
     # CSS selectors (applied in every frame) for PII that is on screen but is not an artifact target.
     # Masked in screenshots; text replaced with «masked» in DOM dumps.
     mask_selectors: list[str] = []
+    # Reviewed UI chrome (status bars, field hints) exempt from the screenshot rule that masks every leaf
+    # showing a digit. It exempts nothing else: mask_selectors, sensitive targets and text-entry controls
+    # are still masked inside these regions.
+    unmask_selectors: list[str] = []
     # Partial reveals for evidence screenshots. Empty → every masked value is hidden completely.
     screenshot_reveal: list[RevealRule] = []
 
@@ -87,6 +90,9 @@ class Tenant(_Cfg):
         for rule in self.screenshot_reveal:
             if rule.selector not in self.mask_selectors:
                 raise ValueError(f"screenshot_reveal selector {rule.selector!r} is not in mask_selectors")
+        for sel in self.unmask_selectors:
+            if sel in self.mask_selectors:
+                raise ValueError(f"unmask_selectors entry {sel!r} is also in mask_selectors")
         return self
 
 

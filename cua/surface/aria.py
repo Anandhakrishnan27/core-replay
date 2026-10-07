@@ -214,7 +214,6 @@ ELEMENT_JS = r"""
   return {
     tag,
     name_attr: nameAttr,
-    id_attr: el.getAttribute('id'),
     label: label || null,
     text: isControl ? null : norm(el.innerText ?? el.textContent).slice(0, 200),
     masked: masked(el),

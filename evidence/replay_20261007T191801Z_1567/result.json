@@ -1,0 +1,18 @@
+{
+  "run_id": "20261007T191801Z_1567",
+  "mode": "replay",
+  "capability_id": "mockbank.member.lookup_savings_balance",
+  "capability_version": "1.0.0",
+  "tenant_id": "cu_alpha",
+  "status": "success",
+  "outcome_code": "SUCCESS",
+  "outputs": {
+    "savings_balance": "\u00absavings_balance:sha256:fbd501ca6a\u00bb"
+  },
+  "failure": null,
+  "recoveries": [],
+  "handoffs": [],
+  "started_at": "2026-10-07T19:18:01.479545Z",
+  "duration_ms": 5158,
+  "evidence_dir": "evidence/replay_20261007T191801Z_1567"
+}

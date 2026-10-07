@@ -128,7 +128,7 @@ def create_app(server: OperatorServer) -> FastAPI:
             raise HTTPException(404, "no screenshot for this run")
         return FileResponse(path, media_type="image/png")
 
-    def transition(run_id: str, op: str, operator_id: str = "operator") -> dict[str, str]:
+    async def transition(run_id: str, op: str, operator_id: str = "operator") -> dict[str, str]:
         c = entry_for(run_id).control
         try:
             if op == "take":
@@ -141,19 +141,20 @@ def create_app(server: OperatorServer) -> FastAPI:
                 c.abort()
         except InvalidTransition as e:
             raise HTTPException(409, str(e)) from e
+        await c.flush()  # e.g. the live page is unlocked before "take control" returns
         return {"state": c.state.value, "holder": c.holder}
 
     @app.post("/api/runs/{run_id}/take-control")
     async def take_control(run_id: str, operator_id: str = "operator") -> dict[str, str]:
-        return transition(run_id, "take", operator_id)
+        return await transition(run_id, "take", operator_id)
 
     @app.post("/api/runs/{run_id}/hand-back")
     async def hand_back(run_id: str) -> dict[str, str]:
-        return transition(run_id, "back")
+        return await transition(run_id, "back")
 
     @app.post("/api/runs/{run_id}/abort")
     async def abort(run_id: str) -> dict[str, str]:
-        return transition(run_id, "abort")
+        return await transition(run_id, "abort")
 
     return app
 
