@@ -1,0 +1,449 @@
+{
+  "schema_version": "1.0",
+  "id": "mockbank.member.lookup_savings_balance",
+  "version": "1.0.0",
+  "title": "Look up member <member_id> and read the savings balance",
+  "description": "Look up member <member_id> and read the savings balance. Fills forms but commits nothing. Compiled from discovery run 20261007T014636Z_b9dd.",
+  "app": {
+    "product": "mockbank_core",
+    "version_range": ">=2.0,<3.0",
+    "surface": "legacy_web",
+    "fingerprint": {
+      "all_of": [
+        {
+          "kind": "text_present",
+          "text": "MockBank Core"
+        },
+        {
+          "kind": "target_visible",
+          "target": "member_lookup_link"
+        }
+      ],
+      "any_of": [],
+      "timeout_ms": 8000
+    }
+  },
+  "contract": {
+    "inputs": [
+      {
+        "name": "member_id",
+        "type": "string",
+        "description": "Typed into the 'Member Number' field.",
+        "required": true,
+        "sensitivity": "pii",
+        "pattern": "^[0-9]+$"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "savings_balance",
+        "type": "decimal",
+        "description": "'Balance' of the 'Share Savings' row.",
+        "sensitivity": "pii"
+      }
+    ],
+    "outcomes": [
+      {
+        "code": "SUCCESS",
+        "kind": "success",
+        "description": "Goal completed; returns savings_balance.",
+        "returns": [
+          "savings_balance"
+        ]
+      },
+      {
+        "code": "MEMBER_NOT_FOUND",
+        "kind": "business",
+        "description": "Search returned no record for the entered member identifier",
+        "returns": []
+      },
+      {
+        "code": "NO_SHARE_SAVINGS",
+        "kind": "business",
+        "description": "'Member Summary' is shown but has no 'Share Savings' row",
+        "returns": []
+      }
+    ]
+  },
+  "policy": {
+    "max_risk": "reversible",
+    "requires_confirmation": false
+  },
+  "targets": {
+    "member_lookup_link": {
+      "description": "link 'Member Lookup'",
+      "locators": [
+        {
+          "strategy": "role",
+          "role": "link",
+          "name": "Member Lookup",
+          "exact": true
+        },
+        {
+          "strategy": "text",
+          "text": "Member Lookup",
+          "exact": true
+        },
+        {
+          "strategy": "css",
+          "selector": "a[href*='mbrlookup']"
+        }
+      ],
+      "frame_path": [
+        "nav"
+      ],
+      "match": {
+        "unique": true,
+        "visible": true
+      },
+      "sensitive": false,
+      "rationale": "Verified unique on the live page during discovery; tried in order: accessible role + name (what an operator sees); its visible text; stable markup attributes (fallback)"
+    },
+    "member_number_field": {
+      "description": "input field captioned 'Member Number'",
+      "locators": [
+        {
+          "strategy": "near_text",
+          "anchor_text": "Member Number",
+          "relation": "following_input",
+          "role": "textbox"
+        },
+        {
+          "strategy": "css",
+          "selector": "form[name='lookup'] input[name='mbrno']"
+        }
+      ],
+      "frame_path": [
+        "main"
+      ],
+      "match": {
+        "unique": true,
+        "visible": true,
+        "enabled": true
+      },
+      "sensitive": true,
+      "rationale": "Verified unique on the live page during discovery; tried in order: the visible caption beside it (legacy form without <label for>); stable markup attributes (fallback)"
+    },
+    "search_button": {
+      "description": "button 'Search'",
+      "locators": [
+        {
+          "strategy": "role",
+          "role": "button",
+          "name": "Search",
+          "exact": true
+        },
+        {
+          "strategy": "css",
+          "selector": "form[name='lookup'] input[type='submit']"
+        }
+      ],
+      "frame_path": [
+        "main"
+      ],
+      "match": {
+        "unique": true,
+        "visible": true,
+        "enabled": true
+      },
+      "sensitive": false,
+      "rationale": "Verified unique on the live page during discovery; tried in order: accessible role + name (what an operator sees); stable markup attributes (fallback)"
+    },
+    "share_savings_balance_cell": {
+      "description": "'Balance' cell in the 'Share Savings' row of the table headed 'Account Type'",
+      "locators": [
+        {
+          "strategy": "table_cell",
+          "table_has_header": "Account Type",
+          "row_contains": "Share Savings",
+          "column_header": "Balance"
+        }
+      ],
+      "frame_path": [
+        "main"
+      ],
+      "match": {
+        "unique": true,
+        "visible": true,
+        "text_pattern": "^-?[$€£]?-?[0-9,]+\\.[0-9]{2}$"
+      },
+      "sensitive": true,
+      "rationale": "Verified unique on the live page during discovery; tried in order: row label + column header (survives row and column reordering). Dropped 1 positional fallback(s): row position changes with the data. text_pattern guards against reading the wrong cell."
+    },
+    "notice_ok_button": {
+      "description": "OK button on the 'System Notice' interstitial",
+      "locators": [
+        {
+          "strategy": "role",
+          "role": "button",
+          "name": "OK",
+          "exact": true
+        },
+        {
+          "strategy": "css",
+          "selector": "div.sysnotice input[value='OK']"
+        }
+      ],
+      "frame_path": [],
+      "match": {
+        "unique": true,
+        "visible": true
+      },
+      "sensitive": false,
+      "rationale": "The interstitial can open in any frame, so no frame_path; OK is its only control."
+    }
+  },
+  "conditions": {
+    "member_not_found": {
+      "classification": "business_outcome",
+      "description": "Search returned no record for the entered member identifier",
+      "detect": {
+        "all_of": [],
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "No member found"
+          }
+        ],
+        "timeout_ms": 1500
+      },
+      "handler": {
+        "do": "return_outcome",
+        "outcome": "MEMBER_NOT_FOUND"
+      },
+      "applies_to": [
+        "click_search_button"
+      ]
+    },
+    "no_share_savings": {
+      "classification": "business_outcome",
+      "description": "'Member Summary' is shown but has no 'Share Savings' row",
+      "detect": {
+        "all_of": [
+          {
+            "kind": "text_present",
+            "text": "Member Summary"
+          },
+          {
+            "kind": "target_absent",
+            "target": "share_savings_balance_cell"
+          }
+        ],
+        "any_of": [],
+        "timeout_ms": 1500
+      },
+      "handler": {
+        "do": "return_outcome",
+        "outcome": "NO_SHARE_SAVINGS"
+      },
+      "applies_to": [
+        "click_search_button"
+      ]
+    },
+    "system_notice": {
+      "classification": "recoverable",
+      "description": "'System Notice' interstitial dialog",
+      "detect": {
+        "all_of": [],
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "System Notice"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "dismiss",
+        "target": "notice_ok_button",
+        "max_times": 2
+      },
+      "applies_to": "all"
+    },
+    "still_processing": {
+      "classification": "recoverable",
+      "description": "Server-side 'Processing, please wait' page",
+      "detect": {
+        "all_of": [],
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "Processing, please wait"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "wait_until_clear",
+        "max_attempts": 3,
+        "backoff_ms": 2000
+      },
+      "applies_to": "all"
+    },
+    "session_expired": {
+      "classification": "recoverable",
+      "description": "Session timed out; login page shown. Re-authenticate via the session provider once, else escalate.",
+      "detect": {
+        "all_of": [],
+        "any_of": [
+          {
+            "kind": "url_matches",
+            "pattern": "/login"
+          },
+          {
+            "kind": "text_present",
+            "text": "Your session has expired"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "reauthenticate",
+        "max_attempts": 1
+      },
+      "applies_to": "all"
+    },
+    "permission_denied": {
+      "classification": "hard_failure",
+      "description": "Service account lacks access",
+      "detect": {
+        "all_of": [],
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "You are not authorized"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "fail",
+        "category": "PERMISSION_DENIED"
+      },
+      "applies_to": "all"
+    },
+    "app_error": {
+      "classification": "hard_failure",
+      "description": "Generic application error page",
+      "detect": {
+        "all_of": [],
+        "any_of": [
+          {
+            "kind": "text_present",
+            "text": "An unexpected error has occurred"
+          }
+        ],
+        "timeout_ms": 500
+      },
+      "handler": {
+        "do": "fail",
+        "category": "APP_ERROR"
+      },
+      "applies_to": "all"
+    }
+  },
+  "steps": [
+    {
+      "id": "open_console",
+      "intent": "Open /console",
+      "action": {
+        "type": "navigate",
+        "url": "{{tenant.base_url}}/console"
+      },
+      "risk": "read",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "click_member_lookup_link",
+      "intent": "Click the link 'Member Lookup'",
+      "action": {
+        "type": "click",
+        "target": "member_lookup_link"
+      },
+      "risk": "read",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "target_visible",
+            "target": "member_number_field"
+          }
+        ],
+        "any_of": [],
+        "timeout_ms": 10000
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "enter_member_id",
+      "intent": "Type {{inputs.member_id}} into the input field captioned 'Member Number'",
+      "action": {
+        "type": "fill",
+        "target": "member_number_field",
+        "value": "{{inputs.member_id}}"
+      },
+      "risk": "reversible",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "click_search_button",
+      "intent": "Click the button 'Search'",
+      "action": {
+        "type": "click",
+        "target": "search_button"
+      },
+      "risk": "read",
+      "expect": {
+        "all_of": [
+          {
+            "kind": "target_visible",
+            "target": "share_savings_balance_cell"
+          },
+          {
+            "kind": "text_present",
+            "text": "Member Summary"
+          }
+        ],
+        "any_of": [],
+        "timeout_ms": 10000
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "read_savings_balance",
+      "intent": "Read savings_balance from the 'Balance' cell in the 'Share Savings' row of the table headed 'Account Type'",
+      "action": {
+        "type": "extract",
+        "target": "share_savings_balance_cell",
+        "output": "savings_balance",
+        "parse": "currency"
+      },
+      "risk": "read",
+      "timeout_ms": 10000
+    }
+  ],
+  "success": {
+    "all_of": [
+      {
+        "kind": "target_visible",
+        "target": "share_savings_balance_cell"
+      },
+      {
+        "kind": "text_present",
+        "text": "Member Summary"
+      }
+    ],
+    "any_of": [],
+    "timeout_ms": 10000
+  },
+  "provenance": {
+    "discovery_run_id": "20261007T014636Z_b9dd",
+    "model": "claude-opus-5-5",
+    "recorded_at": "2026-10-07T01:46:36.540229Z",
+    "compiler_version": "0.1.0",
+    "human_assisted_steps": []
+  },
+  "review": {
+    "status": "draft",
+    "notes": "Compiled automatically. Before approving, check: locators and their order, checkpoint texts, condition texts and outcome codes, input pattern, and output sensitivity."
+  }
+}

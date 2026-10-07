@@ -22,8 +22,8 @@ Build order differs from runtime order on purpose. Replay is built before discov
 | 1 | `mockbank/` legacy target app + fault injection | ✅ done + tested |
 | 2 | `cua/surface/`, `cua/session/`, network allowlist, evidence screenshots | ✅ done + tested |
 | 3 | `cua/replay/` resolver, checks (race), executor; enable `tests/test_replay_mockbank.py` | ✅ done + tested |
-| 4 | `cua/discovery/` + `cua/compiler/`; one real LLM run committed to `evidence/` | ⏳ next |
-| 5 | Handoff wiring: operator in-process on :8001, recorder, resync | todo |
+| 4 | `cua/discovery/` + `cua/compiler/`; one real LLM run committed to `evidence/` | ✅ done + tested (real run saved `1.0.0`; curated evidence copy pending) |
+| 5 | Handoff wiring: operator in-process on :8001, recorder, resync | ⏳ next |
 | 6 | README, REPORT, curated evidence | todo |
 
 - Unimplemented code is marked `TODO(phase-N)`. Its docstrings describe the intended algorithm: follow them.
@@ -52,7 +52,10 @@ make schema                                  # regenerate capabilities/artifact.
 uv run cua list
 uv run cua validate capabilities/<product>/<capability>/<semver>.json
 uv run cua approve <capability_id> --reviewer <name>          # required before unattended replay
-uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the savings balance"
+uv run cua discover --tenant cu_alpha --goal "look up member 10001 and read the savings balance" \
+  --capability-id mockbank.member.lookup_savings_balance --param member_id=10001 [--version x.y.z] [--fault <name>]
+# discovery → compile → self-test replay → save; exit 0 saved, 1 failed, 2 refused (bad id / version exists)
+# discover on the HAPPY path (a member with savings); other inputs and outcomes are replay's job
 uv run cua replay <capability_id> --tenant cu_alpha --input member_id=10002 [--fault <name>] [--supervised] [--confirm]
 # operator page (:8001) starts in-process with each run, see cua/handoff/operator.py
 ```
@@ -65,22 +68,24 @@ cua/schema/        artifact.py (CapabilityArtifact), result.py (RunResult), trac
 cua/surface/       Surface protocol + Playwright implementation     (the ONLY code that touches the browser)
 cua/session/       SessionProvider: login + reauthenticate with env credentials
 cua/safety/        policy.py (PolicyGate: allowlist, risk gate), redact.py
-cua/discovery/     LLM agent loop, observation, tools, prompts, stuck detection, trace recorder
-cua/compiler/      trace → artifact (one module per pass)
+cua/discovery/     LLM agent loop, tools, prompts, stuck detection, trace recorder, pipeline (`cua discover`)
+cua/compiler/      trace → artifact (one module per pass) + selftest (replay of the draft before saving)
 cua/replay/        preflight, resolver, checks (condition/checkpoint race), executor, extract, overrides
 cua/handoff/       controller (state machine), models, recorder, operator API (in-process, :8001)
 cua/evidence/      JSONL logger, screenshots, traces (redacts on write)
 cua/catalog.py     load / save / approve / list artifacts
 cua/config.py      policy + tenant config loading
 capabilities/      <product>/<capability>/<semver>.json + artifact.schema.json (generated)
-config/            policy.yaml, tenants/*.yaml
+config/            policy.yaml, tenants/*.yaml, products/<product>.conditions.yaml (condition packs)
 evidence/          curated demo runs (see evidence/README.md)
 tests/
 ```
 
 **About `tests/fixtures/lookup_savings_balance.handwritten.json`:** this is a **hand-written fixture**, not generated output (it used to live at `capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`). It lets replay be built before discovery, and it is the target shape for the compiler. Don't overwrite it. `capabilities/` holds only generated artifacts.
 
-**Demo targets:** `make demo-replay | demo-notfound | demo-handoff` replay by capability id, so they fail with `FileNotFoundError` until Phase 4 discovery writes `capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`. That is expected; there is deliberately no `--artifact` CLI flag. To replay an unsaved draft (the Phase 4 compiler self-test), call `cua.replay.executor.execute()` directly with the loaded artifact and `mode="supervised"`: it runs the same pre-flight as a catalog replay.
+**Demo targets:** `make demo-replay | demo-notfound | demo-handoff` replay by capability id. They use `capabilities/mockbank/member.lookup_savings_balance/1.0.0.json`, written by the first real discovery run. It is a draft, so they pass `--supervised`; unattended replay needs `cua approve`. There is deliberately no `--artifact` CLI flag: an unsaved draft is replayed with `cua.replay.executor.execute()` and `mode="supervised"` (that is what the compiler self-test does).
+
+**Saved versions are immutable:** `cua discover` refuses a version that already exists. Re-discover with `--version`, or delete an uncommitted draft first.
 
 ## Invariants: never violate these
 
@@ -121,7 +126,7 @@ tests/
   |---|---|
   | none | success |
   | `not_found` | business_outcome `MEMBER_NOT_FOUND` |
-  | member 10003 | business_outcome `NO_SAVINGS_ACCOUNT` |
+  | member 10003 | business_outcome `NO_SAVINGS_ACCOUNT` (compiled artifacts: derived `NO_SHARE_SAVINGS`) |
   | `notice` | success (dismissed) |
   | `slow` | success (waited until clear) |
   | `session_expired` | success (reauthenticated once) |
