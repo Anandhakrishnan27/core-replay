@@ -55,6 +55,7 @@ from cua.surface.aria import (
 )
 from cua.surface.base import ActionFailed, Observation, Resolved, TargetAmbiguous, TargetNotFound
 from cua.surface.locators import element_at, frames_for, to_playwright
+from cua.surface.wait import poll_until
 
 MASK_COLOR = "#FF00FF"
 
@@ -256,13 +257,13 @@ class PlaywrightWebSurface:
 
     # ---- resolve ------------------------------------------------------------------------------- #
 
-    async def _candidates(self, target: Target, locator: Locator) -> list[ElementHandle]:
-        """Current elements for one locator, across the target's frames. A snapshot: never waits."""
+    async def _candidates(self, frame_path: list[str], locator: Locator) -> list[ElementHandle]:
+        """Current elements for one locator, across the frames on `frame_path`. A snapshot: never waits."""
         if isinstance(locator, CoordinateLocator):
             handle = await element_at(self.page, locator.x, locator.y)
             return [handle] if handle is not None else []
         found: list[ElementHandle] = []
-        for frame in frames_for(self.page, target.frame_path):
+        for frame in frames_for(self.page, frame_path):
             try:
                 found.extend(await to_playwright(frame, locator).element_handles())
             except PlaywrightError:
@@ -287,7 +288,7 @@ class PlaywrightWebSurface:
     async def _resolve(self, target_id: str, target: Target, *, log: bool) -> Resolved:
         ambiguous = False
         for index, locator in enumerate(target.locators):
-            candidates = await self._candidates(target, locator)
+            candidates = await self._candidates(target.frame_path, locator)
             if not candidates:
                 continue
             if len(candidates) > 1 and target.match.unique:
@@ -310,6 +311,53 @@ class PlaywrightWebSurface:
         Single-shot (does not wait). locator_index > 0 is logged and is a drift signal.
         """
         return await self._resolve(target_id, target, log=True)
+
+    # ---- discovery: refs, locator verification, settling ---------------------------------------- #
+
+    async def resolve_ref(self, ref: str) -> Resolved:
+        """The live element behind an aria ref from the latest observe(). Raises TargetNotFound."""
+        handle = await self._ref_handle(ref)
+        if handle is None:
+            raise TargetNotFound(f"ref '{ref}' is not an element on the current page")
+        return Resolved(target_id=ref, locator_index=0, handle=handle)
+
+    async def verify_locators(
+        self, resolved: Resolved, frame_path: list[str], locators: Sequence[Locator]
+    ) -> list[bool]:
+        """For each locator: does it match exactly one element right now, and is it THIS element?"""
+        results: list[bool] = []
+        for locator in locators:
+            ok = False
+            if not isinstance(locator, CoordinateLocator):
+                found = await self._candidates(frame_path, locator)
+                if len(found) == 1:
+                    try:
+                        ok = bool(await found[0].evaluate("(a, b) => a === b", resolved.handle))
+                    except PlaywrightError:
+                        ok = False  # different frame or detached: not the same element
+            results.append(ok)
+        return results
+
+    async def settle(self, timeout_ms: int) -> bool:
+        """Wait until every frame has finished loading and the frame tree stopped changing (two polls)."""
+        last: list[tuple[str, str]] | None = None
+
+        async def stable() -> bool:
+            nonlocal last
+            try:
+                states = [
+                    (f.url, str(await f.evaluate("document.readyState")))
+                    for f in self.page.frames
+                    if not f.is_detached()
+                ]
+            except PlaywrightError:
+                last = None  # a frame is navigating
+                return False
+            done = all(state == "complete" for _, state in states) and states == last
+            last = states
+            return done
+
+        return await poll_until(stable, timeout_ms, self.policy.limits.poll_interval_ms)
 
     # ---- act / read ---------------------------------------------------------------------------- #
 
@@ -411,7 +459,7 @@ class PlaywrightWebSurface:
     async def _absent(self, target: Target) -> bool:
         """No locator finds any visible element. Ambiguous is NOT absent."""
         for locator in target.locators:
-            for handle in await self._candidates(target, locator):
+            for handle in await self._candidates(target.frame_path, locator):
                 if await handle.is_visible():
                     return False
         return True

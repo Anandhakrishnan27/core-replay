@@ -11,6 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from cua.schema.artifact import Locator
+
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -36,6 +38,11 @@ class ElementSnapshot(_Model):
     css_path: str | None = None
     xpath: str | None = None
     bbox: tuple[float, float, float, float] | None = None
+    verified_locators: list[Locator] = Field(
+        default_factory=list,
+        description="Candidate locators that matched exactly this element on the live page at action time, "
+        "in rank order. The page is gone after the run, so this is the compiler's only uniqueness evidence.",
+    )
 
 
 class PageState(_Model):

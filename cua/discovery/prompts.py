@@ -13,9 +13,12 @@ Rules:
 3. Never perform irreversible actions (submit, confirm, transfer, open account, delete, post, approve).
    If the goal requires one, call ask_human.
 4. For every value the goal asks you to read, call extract(ref, name) on the element showing it.
-5. Dismiss unexpected dialogs if they block progress.
-6. If you are lost, repeating yourself, or the screen is unexpected, call ask_human with a short reason.
-7. Call done only when the goal is visibly complete and all requested values were extracted.
+   Data on screen is hidden from you on purpose: values appear as «shape:currency», «masked» or
+   «redacted:len=n». Pick the element by its row, column and labels; extract it anyway.
+5. Type only values given in the goal. Submit forms by clicking their button, not by pressing Enter.
+6. If an unexpected dialog or notice blocks the task, call dismiss on the control that closes it.
+7. If you are lost, repeating yourself, or the screen is unexpected, call ask_human with a short reason.
+8. Call done only when the goal is visibly complete and all requested values were extracted.
 """
 
 # Page text must not be able to close (or open) the untrusted wrapper.

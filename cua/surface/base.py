@@ -9,10 +9,11 @@ Policy checks, redaction and evidence logging happen inside implementations, so 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from cua.schema.artifact import Action, Predicate, RiskClass, Target
+from cua.schema.artifact import Action, Locator, Predicate, RiskClass, Target
 from cua.schema.trace import ElementSnapshot, PageState
 
 
@@ -57,6 +58,22 @@ class Surface(Protocol):
 
     async def snapshot(self, reason: str, *, dom: bool = False) -> list[str]:
         """Masked screenshot (+ DOM on failure). Returns evidence-relative paths."""
+        ...
+
+    # Discovery only: the LLM names elements by observation ref, not by artifact target.
+
+    async def resolve_ref(self, ref: str) -> Resolved:
+        """The live element behind a ref from the latest observe(). Raises TargetNotFound."""
+        ...
+
+    async def verify_locators(
+        self, resolved: Resolved, frame_path: list[str], locators: Sequence[Locator]
+    ) -> list[bool]:
+        """Per locator: matches exactly one element now, and it is `resolved`."""
+        ...
+
+    async def settle(self, timeout_ms: int) -> bool:
+        """Bounded wait until the page stops loading/changing after an action."""
         ...
 
 
